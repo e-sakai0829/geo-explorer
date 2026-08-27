@@ -20,6 +20,7 @@ const navigation = [
   { name: "AEO直答記事エディタ", href: "/editor", icon: Sparkles },
   { name: "AI引用メディア分析", href: "/citations", icon: Link2 },
   { name: "効果測定 (Before/After)", href: "/performance", icon: TrendingUp },
+  { name: "公式コラム・ナレッジ", href: "/insights", icon: Sparkles },
   { name: "料金・クレジット", href: "/pricing", icon: CreditCard },
 ];
 
