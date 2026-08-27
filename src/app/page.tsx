@@ -247,7 +247,7 @@ export default function LandingPage() {
                   <span className="text-indigo-600 font-bold">Live Scan</span>
                 </div>
                 <div className="text-slate-700 leading-relaxed">
-                  [Brand Ailo] {lang === "zh-TW" ? "提及: ◯ (引用率: 25.0%)" : lang === "en" ? "Mention: Yes (Share: 25.0%)" : "言及: ◯ (引用率: 25.0%)"}<br />
+                  [Your Brand] {lang === "zh-TW" ? "提及: ◯ (引用率: 25.0%)" : lang === "en" ? "Mention: Yes (Share: 25.0%)" : "言及: ◯ (引用率: 25.0%)"}<br />
                   [Competitor A] {lang === "zh-TW" ? "提及: ◯ (引用率: 45.0%)" : lang === "en" ? "Mention: Yes (Share: 45.0%)" : "言及: ◯ (引用率: 45.0%)"}<br />
                   [Competitor B] {lang === "zh-TW" ? "提及: ◯ (引用率: 30.0%)" : lang === "en" ? "Mention: Yes (Share: 30.0%)" : "言及: ◯ (引用率: 30.0%)"}
                 </div>
