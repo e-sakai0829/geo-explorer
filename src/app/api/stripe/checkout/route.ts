@@ -2,22 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-// 言語・通貨別の正確なプラン価格定義 (おとり表示・為替不整合を完全排除)
+// 言語・通貨別の正確なプラン価格定義 (Stripe 最小通貨単位: JPY=1円, USD/TWD=100分の1セント)
 const PLAN_PRICES: Record<string, Record<string, { name: string; amount: number; currency: string; credits: number }>> = {
   ja: {
+    // JPY はゼロ小数点通貨 (1 JPY = amount: 1)
     starter: { name: "GEO Explorer Starter プラン", amount: 9800, currency: "jpy", credits: 30 },
     growth: { name: "GEO Explorer Growth プラン", amount: 29800, currency: "jpy", credits: 150 },
     agency: { name: "GEO Explorer Agency プラン", amount: 79800, currency: "jpy", credits: 500 },
   },
   "zh-TW": {
-    starter: { name: "GEO Explorer Starter 方案", amount: 2190, currency: "twd", credits: 30 },
-    growth: { name: "GEO Explorer Growth 方案", amount: 6590, currency: "twd", credits: 150 },
-    agency: { name: "GEO Explorer Agency 方案", amount: 17900, currency: "twd", credits: 500 },
+    // TWD は2桁小数通貨 (NT$ 2,190 = amount: 219000)
+    starter: { name: "GEO Explorer Starter 方案", amount: 219000, currency: "twd", credits: 30 },
+    growth: { name: "GEO Explorer Growth 方案", amount: 659000, currency: "twd", credits: 150 },
+    agency: { name: "GEO Explorer Agency 方案", amount: 1790000, currency: "twd", credits: 500 },
   },
   en: {
-    starter: { name: "GEO Explorer Starter Plan", amount: 6900, currency: "usd", credits: 30 }, // $69.00
-    growth: { name: "GEO Explorer Growth Plan", amount: 19900, currency: "usd", credits: 150 }, // $199.00
-    agency: { name: "GEO Explorer Agency Plan", amount: 49900, currency: "usd", credits: 500 }, // $499.00
+    // USD は2桁小数通貨 ($69.00 = amount: 6900)
+    starter: { name: "GEO Explorer Starter Plan", amount: 6900, currency: "usd", credits: 30 },
+    growth: { name: "GEO Explorer Growth Plan", amount: 19900, currency: "usd", credits: 150 },
+    agency: { name: "GEO Explorer Agency Plan", amount: 49900, currency: "usd", credits: 500 },
   },
 };
 
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     const origin = req.headers.get("origin") || "https://geo.traditionalart.biz";
 
-    // 2. Stripe Checkout セッションを作成（表示通貨・金額と完全に一致）
+    // 2. Stripe Checkout セッションを作成（subscription.metadata にも planId を完全注入）
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ["card"],
       line_items: [
@@ -82,6 +85,14 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: "subscription",
+      subscription_data: {
+        metadata: {
+          planId,
+          orgId,
+          userId: user?.id || "",
+          currency: plan.currency,
+        },
+      },
       success_url: `${origin}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/pricing?payment=cancelled`,
       client_reference_id: orgId || user?.id || undefined,

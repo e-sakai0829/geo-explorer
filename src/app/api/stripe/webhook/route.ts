@@ -9,143 +9,154 @@ const PLAN_CREDITS: Record<string, number> = {
 };
 
 export async function POST(req: NextRequest) {
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!stripeKey) {
-    console.error("STRIPE_SECRET_KEY is not configured.");
-    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
-  }
-
-  // 署名検証バイパスの完全排除 (Fail-closed)
-  if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET is not configured.");
-    return NextResponse.json({ error: "Webhook secret missing" }, { status: 500 });
-  }
-
-  const signature = req.headers.get("stripe-signature");
-  if (!signature) {
-    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
-  }
-
-  const stripe = new Stripe(stripeKey, {
-    apiVersion: "2023-10-16" as any,
-  });
-
-  let event: Stripe.Event;
-
   try {
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!stripeKey) {
+      console.error("Missing STRIPE_SECRET_KEY in Webhook");
+      return NextResponse.json({ error: "Missing STRIPE_SECRET_KEY" }, { status: 500 });
+    }
+
+    if (!webhookSecret) {
+      console.error("Missing STRIPE_WEBHOOK_SECRET in Webhook (Fail-closed)");
+      return NextResponse.json({ error: "Missing STRIPE_WEBHOOK_SECRET" }, { status: 500 });
+    }
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16" as any,
+    });
+
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      console.error("Missing stripe-signature header");
+      return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
+    }
+
     const body = await req.text();
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (err: any) {
-    console.error(`Webhook signature verification failed: ${err.message}`);
-    return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
-  }
+    let event: Stripe.Event;
 
-  // RLSをバイパスするAdminクライアントを使用（Service Role 必須）
-  const supabaseAdmin = createAdminClient();
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
+    }
 
-  try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const planId = session.metadata?.planId || "growth";
-        const orgId = session.metadata?.orgId || session.client_reference_id;
-        const userId = session.metadata?.userId;
-        const customerId = session.customer as string;
-        const subscriptionId = session.subscription as string;
-        const credits = PLAN_CREDITS[planId] || 30;
+    // サーバーレス環境での RLS バイパス専用 Admin クライアントを取得
+    const supabase = createAdminClient();
 
-        console.log(`[Stripe Webhook] Verified Checkout for orgId: ${orgId}, userId: ${userId}, plan: ${planId}`);
+    // ==========================================
+    // 1. 初回決済完了イベント (checkout.session.completed)
+    // ==========================================
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const metadata = session.metadata || {};
+      const planId = (metadata.planId || "starter").toLowerCase();
+      const orgId = metadata.orgId;
+      const userId = metadata.userId;
+      const customerId = session.customer as string;
 
-        if (orgId) {
-          const { error } = await supabaseAdmin
-            .from("organizations")
-            .update({
-              plan: planId,
-              monthly_credits: credits,
-              used_credits: 0,
-              stripe_customer_id: customerId,
-              stripe_subscription_id: subscriptionId,
-              credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", orgId);
+      const monthlyCredits = PLAN_CREDITS[planId] || 30;
 
-          if (error) throw new Error(`Failed to update org by orgId: ${error.message}`);
-        } else if (userId) {
-          const { error } = await supabaseAdmin
-            .from("organizations")
-            .update({
-              plan: planId,
-              monthly_credits: credits,
-              used_credits: 0,
-              stripe_customer_id: customerId,
-              stripe_subscription_id: subscriptionId,
-              credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("user_id", userId);
-
-          if (error) throw new Error(`Failed to update org by userId: ${error.message}`);
-        }
-        break;
-      }
-
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log(`[Stripe Webhook] Subscription updated for: ${subscription.id}`);
-
-        // プラン判定 (Price ID やメタデータからプランを抽出)
-        const priceAmount = subscription.items.data[0]?.price.unit_amount || 29800;
-        let planId = "growth";
-        let credits = 150;
-
-        if (priceAmount <= 10000) {
-          planId = "starter";
-          credits = 30;
-        } else if (priceAmount >= 70000) {
-          planId = "agency";
-          credits = 500;
-        }
-
-        const { error } = await supabaseAdmin
+      // 組織のプランとクレジットを反映
+      if (orgId) {
+        const { error: orgError } = await supabase
           .from("organizations")
           .update({
             plan: planId,
-            monthly_credits: credits,
+            monthly_credits: monthlyCredits,
+            stripe_customer_id: customerId || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("stripe_subscription_id", subscription.id);
+          .eq("id", orgId);
 
-        if (error) console.error("Failed to update subscription on .updated event:", error);
-        break;
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log(`[Stripe Webhook] Subscription canceled for: ${subscription.id}`);
-
-        const { error } = await supabaseAdmin
+        if (orgError) {
+          console.error("Failed to update organization by orgId:", orgError);
+        }
+      } else if (userId) {
+        const { error: orgError } = await supabase
           .from("organizations")
           .update({
-            plan: "starter",
-            monthly_credits: 10,
+            plan: planId,
+            monthly_credits: monthlyCredits,
+            stripe_customer_id: customerId || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("stripe_subscription_id", subscription.id);
+          .eq("user_id", userId);
 
-        if (error) throw new Error(`Failed to cancel subscription: ${error.message}`);
-        break;
+        if (orgError) {
+          console.error("Failed to update organization by userId:", orgError);
+        }
+      } else if (customerId) {
+        const { error: orgError } = await supabase
+          .from("organizations")
+          .update({
+            plan: planId,
+            monthly_credits: monthlyCredits,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+
+        if (orgError) {
+          console.error("Failed to update organization by customerId:", orgError);
+        }
+      }
+    }
+
+    // ==========================================
+    // 2. プラン変更・解約イベント (customer.subscription.updated)
+    // ==========================================
+    if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+      const metadata = subscription.metadata || {};
+
+      // metadata.planId からの判定（最優先・完全多通貨対応）
+      let planId = metadata.planId ? metadata.planId.toLowerCase() : "";
+
+      // metadata にない場合のフォールバック（USD / TWD / JPY の多通貨正確照合）
+      if (!planId || !PLAN_CREDITS[planId]) {
+        const priceAmount = subscription.items?.data?.[0]?.price?.unit_amount || 0;
+        const currency = (subscription.items?.data?.[0]?.price?.currency || "jpy").toLowerCase();
+
+        if (currency === "usd") {
+          if (priceAmount <= 7000) planId = "starter"; // $69
+          else if (priceAmount >= 40000) planId = "agency"; // $499
+          else planId = "growth"; // $199
+        } else if (currency === "twd") {
+          if (priceAmount <= 250000) planId = "starter"; // NT$ 2,190 (219000)
+          else if (priceAmount >= 1500000) planId = "agency"; // NT$ 17,900 (1790000)
+          else planId = "growth"; // NT$ 6,590 (659000)
+        } else {
+          // JPY
+          if (priceAmount <= 10000) planId = "starter"; // ¥9,800
+          else if (priceAmount >= 70000) planId = "agency"; // ¥79,800
+          else planId = "growth"; // ¥29,800
+        }
       }
 
-      default:
-        console.log(`[Stripe Webhook] Handled event: ${event.type}`);
+      const monthlyCredits = PLAN_CREDITS[planId] || 30;
+
+      if (customerId) {
+        const { error: orgError } = await supabase
+          .from("organizations")
+          .update({
+            plan: planId,
+            monthly_credits: monthlyCredits,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+
+        if (orgError) {
+          console.error("Failed to update organization on subscription.updated:", orgError);
+        }
+      }
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    console.error("Stripe Webhook DB Error:", error);
-    return NextResponse.json({ error: error.message || "Webhook processing error" }, { status: 500 });
+    console.error("Stripe Webhook Error:", error);
+    return NextResponse.json({ error: error.message || "Webhook processing failed" }, { status: 500 });
   }
 }
