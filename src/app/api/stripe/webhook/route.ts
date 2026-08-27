@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { supabase } from "@/lib/supabase";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 const PLAN_CREDITS: Record<string, number> = {
   starter: 30,
@@ -9,32 +9,43 @@ const PLAN_CREDITS: Record<string, number> = {
 };
 
 export async function POST(req: NextRequest) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!stripeKey) {
+    console.error("STRIPE_SECRET_KEY is not configured.");
+    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+  }
+
+  // 署名検証バイパスの完全排除 (Fail-closed)
+  if (!webhookSecret) {
+    console.error("STRIPE_WEBHOOK_SECRET is not configured.");
+    return NextResponse.json({ error: "Webhook secret missing" }, { status: 500 });
+  }
+
+  const signature = req.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
+  }
+
+  const stripe = new Stripe(stripeKey, {
+    apiVersion: "2023-10-16" as any,
+  });
+
+  let event: Stripe.Event;
+
   try {
-    const stripeKey = process.env.STRIPE_SECRET_KEY || "dummy_key_for_build";
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2023-10-16" as any,
-    });
-
     const body = await req.text();
-    const signature = req.headers.get("stripe-signature");
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+  } catch (err: any) {
+    console.error(`Webhook signature verification failed: ${err.message}`);
+    return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
+  }
 
-    let event: Stripe.Event;
+  // RLSをバイパスするAdminクライアントを使用（RLSによる更新失敗を完全防止）
+  const supabaseAdmin = createAdminClient();
 
-    // Webhook署名検証
-    if (webhookSecret && signature) {
-      try {
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-      } catch (err: any) {
-        console.error("Webhook signature verification failed:", err.message);
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      }
-    } else {
-      event = JSON.parse(body);
-    }
-
-    // イベント別の厳密なマルチテナント更新処理
+  try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -48,8 +59,7 @@ export async function POST(req: NextRequest) {
         console.log(`[Stripe Webhook] Verified Checkout for orgId: ${orgId}, userId: ${userId}, plan: ${planId}`);
 
         if (orgId) {
-          // 1. orgId による厳密な単一組織更新
-          const { error } = await supabase
+          const { error } = await supabaseAdmin
             .from("organizations")
             .update({
               plan: planId,
@@ -62,10 +72,9 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", orgId);
 
-          if (error) console.error("Failed to update organization by orgId:", error);
+          if (error) throw new Error(`Failed to update org by orgId: ${error.message}`);
         } else if (userId) {
-          // 2. userId による更新
-          await supabase
+          const { error } = await supabaseAdmin
             .from("organizations")
             .update({
               plan: planId,
@@ -77,24 +86,8 @@ export async function POST(req: NextRequest) {
               updated_at: new Date().toISOString(),
             })
             .eq("user_id", userId);
-        } else if (session.customer_email) {
-          // 3. メールアドレスによる組織逆引き更新
-          const { data: userList } = await supabase.auth.admin?.listUsers() || { data: { users: [] } };
-          const matchedUser = userList.users?.find((u: any) => u.email === session.customer_email);
-          if (matchedUser) {
-            await supabase
-              .from("organizations")
-              .update({
-                plan: planId,
-                monthly_credits: credits,
-                used_credits: 0,
-                stripe_customer_id: customerId,
-                stripe_subscription_id: subscriptionId,
-                credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-              .eq("user_id", matchedUser.id);
-          }
+
+          if (error) throw new Error(`Failed to update org by userId: ${error.message}`);
         }
         break;
       }
@@ -103,8 +96,7 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         console.log(`[Stripe Webhook] Subscription canceled for: ${subscription.id}`);
 
-        // 解約時は該当の stripe_subscription_id を持つ組織のみを無料枠へ更新
-        await supabase
+        const { error } = await supabaseAdmin
           .from("organizations")
           .update({
             plan: "starter",
@@ -112,6 +104,8 @@ export async function POST(req: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subscription.id);
+
+        if (error) throw new Error(`Failed to cancel subscription: ${error.message}`);
         break;
       }
 
@@ -121,7 +115,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    console.error("Stripe Webhook Error:", error);
+    console.error("Stripe Webhook DB Error:", error);
     return NextResponse.json({ error: error.message || "Webhook processing error" }, { status: 500 });
   }
 }

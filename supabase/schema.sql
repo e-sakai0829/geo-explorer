@@ -134,6 +134,24 @@ create policy "Users can manage own aeo articles"
     );
 
 -- ============================================================
+-- アトミックなクレジット消費関数 (TOCTOU競合状態の完全防止)
+-- ============================================================
+create or replace function public.consume_credit(org_id uuid)
+returns boolean as $$
+declare
+    affected_rows integer;
+begin
+    update public.organizations
+    set used_credits = used_credits + 1,
+        updated_at = now()
+    where id = org_id and used_credits < monthly_credits;
+
+    get diagnostics affected_rows = row_count;
+    return affected_rows > 0;
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
 -- 新規ユーザー登録時の自動テナント初期化トリガー
 -- ============================================================
 create or replace function public.handle_new_user()
@@ -159,7 +177,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- トリガーの作成 (既存があれば再作成)
+-- トリガーの作成
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
     after insert on auth.users

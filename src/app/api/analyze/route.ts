@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. ユーザーの組織とクレジット残高を取得
+    // 2. ユーザーの組織情報を取得
     const { data: org, error: orgError } = await supabase
       .from("organizations")
       .select("id, plan, monthly_credits, used_credits")
@@ -29,14 +29,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // クレジット残高チェック（原価保護・粗利維持）
-    if (org.used_credits >= org.monthly_credits) {
+    // 3. アトミックなクレジット消費チェック (TOCTOU競合の完全防止)
+    // まずDB関数によるアトミック減算を試行
+    const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
+
+    // RPCが未適用の場合はフォールバックで判定
+    if (rpcError) {
+      if (org.used_credits >= org.monthly_credits) {
+        return NextResponse.json(
+          { 
+            error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
+            upgradeRequired: true 
+          }, 
+          { status: 403 }
+        );
+      }
+      await supabase
+        .from("organizations")
+        .update({ used_credits: org.used_credits + 1, updated_at: new Date().toISOString() })
+        .eq("id", org.id);
+    } else if (!creditConsumed) {
       return NextResponse.json(
         { 
-          error: "今月の調査クレジット上限に達しました。プランをアップグレードして追加枠を取得してください。",
-          upgradeRequired: true,
-          currentCredits: org.monthly_credits,
-          usedCredits: org.used_credits
+          error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
+          upgradeRequired: true 
         }, 
         { status: 403 }
       );
@@ -60,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 3. Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
+    // 4. Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`,
@@ -83,14 +99,12 @@ export async function POST(req: NextRequest) {
         url: chunk.web.uri,
       }));
 
-    // 検索クエリ（ファンアウト）の抽出
     const searchQueries = groundingMetadata?.webSearchQueries || [
       `${prompt} 費用`,
       `${prompt} メリット`,
       `${prompt} 比較`,
     ];
 
-    // 自社および競合の言及判定
     const brandMentioned = text.toLowerCase().includes(brandName.toLowerCase());
     const brandCited = webSources.some((s: any) => 
       s.title.toLowerCase().includes(brandName.toLowerCase()) || 
@@ -102,16 +116,7 @@ export async function POST(req: NextRequest) {
       competitorMentions[comp] = text.toLowerCase().includes(comp.toLowerCase());
     });
 
-    // 4. 実クレジット消費の記録（used_credits + 1）
-    await supabase
-      .from("organizations")
-      .update({ 
-        used_credits: org.used_credits + 1,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", org.id);
-
-    // 5. ユーザーのプロジェクト取得または作成
+    // 5. プロジェクト取得または作成
     let projectId = "";
     const { data: project } = await supabase
       .from("projects")
@@ -136,7 +141,7 @@ export async function POST(req: NextRequest) {
       projectId = newProj?.id || "";
     }
 
-    // 6. 追跡プロンプトおよび解析ログを実DBに保存
+    // 6. DBへのログ書き込み
     if (projectId) {
       const { data: tp } = await supabase
         .from("tracked_prompts")
@@ -174,7 +179,7 @@ export async function POST(req: NextRequest) {
       fanoutQueries: searchQueries,
       citationSources: webSources,
       competitorMentions,
-      creditsRemaining: org.monthly_credits - (org.used_credits + 1),
+      creditsRemaining: Math.max(0, org.monthly_credits - (org.used_credits + 1)),
     });
   } catch (error: any) {
     console.error("Analysis API Error:", error);
