@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
 
-const stripeKey = process.env.STRIPE_SECRET_KEY || "";
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-
-const stripe = new Stripe(stripeKey, {
-  apiVersion: "2023-10-16" as any,
-});
-
 const PLAN_CREDITS: Record<string, number> = {
   starter: 30,
   growth: 150,
@@ -17,6 +10,13 @@ const PLAN_CREDITS: Record<string, number> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const stripeKey = process.env.STRIPE_SECRET_KEY || "dummy_key_for_build";
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16" as any,
+    });
+
     const body = await req.text();
     const signature = req.headers.get("stripe-signature");
 
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         console.log(`[Stripe Webhook] Subscription canceled: ${subscription.id}`);
 
-        // 解約時はプランを starter (無料/初期枠) に戻す
+        // 解約時はプランを starter に戻す
         await supabase
           .from("organizations")
           .update({
