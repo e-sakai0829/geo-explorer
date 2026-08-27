@@ -3,18 +3,23 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import CookieBanner from "@/components/CookieBanner";
 import { ChevronDown } from "lucide-react";
 
 export default function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // LP（/）およびログイン画面（/login）はサイドバーなしの全画面表示
-  const isFullPage = pathname === "/" || pathname === "/login";
+  const isFullPage = pathname === "/" || pathname === "/login" || pathname === "/terms" || pathname === "/privacy" || pathname === "/legal";
   
   const [currentLang, setCurrentLang] = useState("ja");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   if (isFullPage) {
-    return <div className="min-h-screen w-full bg-white">{children}</div>;
+    return (
+      <div className="min-h-screen w-full bg-white">
+        {children}
+        <CookieBanner />
+      </div>
+    );
   }
 
   const languages = [
@@ -43,7 +48,7 @@ export default function AppLayoutWrapper({ children }: { children: React.ReactNo
             <div className="relative">
               <button
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md font-medium text-slate-700 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md font-medium text-slate-700 transition-colors cursor-pointer"
               >
                 <span>{selectedLang.flag}</span>
                 <span>{selectedLang.name}</span>
@@ -87,6 +92,7 @@ export default function AppLayoutWrapper({ children }: { children: React.ReactNo
           {children}
         </main>
       </div>
+      <CookieBanner />
     </div>
   );
 }

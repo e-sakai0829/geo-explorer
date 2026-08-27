@@ -393,10 +393,12 @@ export default function LandingPage() {
             <Sparkles className="w-4 h-4 text-indigo-400" />
             GEO Explorer by Traditionalart
           </div>
-          <div className="flex items-center gap-6 text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-slate-400">
             <Link href="/insights" className="hover:text-white">公式コラム</Link>
             <Link href="/pricing" className="hover:text-white">料金プラン</Link>
-            <Link href="/dashboard" className="hover:text-white">ダッシュボード</Link>
+            <Link href="/terms" className="hover:text-white">利用規約</Link>
+            <Link href="/privacy" className="hover:text-white">プライバシーポリシー (GDPR)</Link>
+            <Link href="/legal" className="hover:text-white">特定商取引法に基づく表記</Link>
           </div>
           <div className="text-slate-500">
             © 2026 Traditionalart Inc. All rights reserved.
