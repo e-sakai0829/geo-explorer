@@ -29,30 +29,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. アトミックなクレジット消費チェック (TOCTOU競合の完全防止)
-    // まずDB関数によるアトミック減算を試行
+    // 3. アトミックなクレジット消費チェック (Fail-closed & 所有者検証)
     const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
 
-    // RPCが未適用の場合はフォールバックで判定
     if (rpcError) {
-      if (org.used_credits >= org.monthly_credits) {
-        return NextResponse.json(
-          { 
-            error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
-            upgradeRequired: true 
-          }, 
-          { status: 403 }
-        );
-      }
-      await supabase
-        .from("organizations")
-        .update({ used_credits: org.used_credits + 1, updated_at: new Date().toISOString() })
-        .eq("id", org.id);
-    } else if (!creditConsumed) {
+      console.error("consume_credit RPC error:", rpcError);
+      return NextResponse.json(
+        { error: "クレジット決済システムでエラーが発生しました。時間を置いて再度お試しください。" },
+        { status: 500 }
+      );
+    }
+
+    if (!creditConsumed) {
       return NextResponse.json(
         { 
           error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
-          upgradeRequired: true 
+          upgradeRequired: true,
+          currentCredits: org.monthly_credits,
+          usedCredits: org.used_credits,
         }, 
         { status: 403 }
       );

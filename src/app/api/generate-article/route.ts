@@ -29,6 +29,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 3. アトミックなクレジット消費チェック (Fail-closed & 所有者検証)
+    const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
+
+    if (rpcError) {
+      console.error("consume_credit RPC error in generate-article:", rpcError);
+      return NextResponse.json(
+        { error: "クレジット処理エラーが発生しました。" },
+        { status: 500 }
+      );
+    }
+
+    if (!creditConsumed) {
+      return NextResponse.json(
+        { 
+          error: "今月の記事生成クレジット上限に達しました。プランをアップグレードしてください。",
+          upgradeRequired: true,
+          currentCredits: org.monthly_credits,
+          usedCredits: org.used_credits,
+        }, 
+        { status: 403 }
+      );
+    }
+
     const { 
       prompt, 
       brandName = "Ailo", 
@@ -90,7 +113,7 @@ ${languageInstruction}
 Format the output in clean, valid Markdown with an engaging H1 title.
 `;
 
-    // 3. AIによる記事生成
+    // 4. AIによる記事生成
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
@@ -102,7 +125,7 @@ Format the output in clean, valid Markdown with an engaging H1 title.
 
     const markdown = response.text || "";
 
-    // 4. プロジェクトの取得または作成
+    // 5. プロジェクトの取得または作成
     const { data: project } = await supabase
       .from("projects")
       .select("id")
@@ -110,7 +133,7 @@ Format the output in clean, valid Markdown with an engaging H1 title.
       .limit(1)
       .single();
 
-    // 5. 生成記事を実DB（aeo_articles）に保存
+    // 6. 生成記事を実DB（aeo_articles）に保存
     if (project?.id) {
       const firstLine = markdown.split("\n")[0] || "";
       const title = firstLine.replace(/^#\s*/, "") || `${prompt} のAEO直答ガイド`;
@@ -134,6 +157,7 @@ Format the output in clean, valid Markdown with an engaging H1 title.
       language: targetLanguage,
       wordCount: markdown.length,
       savedToDb: true,
+      creditsRemaining: Math.max(0, org.monthly_credits - (org.used_credits + 1)),
     });
   } catch (error: any) {
     console.error("Generate Article API Error:", error);

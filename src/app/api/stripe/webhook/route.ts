@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
   }
 
-  // RLSをバイパスするAdminクライアントを使用（RLSによる更新失敗を完全防止）
+  // RLSをバイパスするAdminクライアントを使用（Service Role 必須）
   const supabaseAdmin = createAdminClient();
 
   try {
@@ -92,6 +92,36 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        console.log(`[Stripe Webhook] Subscription updated for: ${subscription.id}`);
+
+        // プラン判定 (Price ID やメタデータからプランを抽出)
+        const priceAmount = subscription.items.data[0]?.price.unit_amount || 29800;
+        let planId = "growth";
+        let credits = 150;
+
+        if (priceAmount <= 10000) {
+          planId = "starter";
+          credits = 30;
+        } else if (priceAmount >= 70000) {
+          planId = "agency";
+          credits = 500;
+        }
+
+        const { error } = await supabaseAdmin
+          .from("organizations")
+          .update({
+            plan: planId,
+            monthly_credits: credits,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_subscription_id", subscription.id);
+
+        if (error) console.error("Failed to update subscription on .updated event:", error);
+        break;
+      }
+
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         console.log(`[Stripe Webhook] Subscription canceled for: ${subscription.id}`);
@@ -110,7 +140,7 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+        console.log(`[Stripe Webhook] Handled event: ${event.type}`);
     }
 
     return NextResponse.json({ received: true });
