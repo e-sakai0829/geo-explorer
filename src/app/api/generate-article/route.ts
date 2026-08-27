@@ -1,81 +1,83 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.GEMINI_API_KEY;
-
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, fanoutQueries = [], targetBrand = "Ailo", competitorBrands = [], rawAnalysis = "" } = await req.json();
+    const { 
+      prompt, 
+      brandName = "Ailo", 
+      fanoutQueries = [], 
+      targetLanguage = "ja" 
+    } = await req.json();
 
-    if (!prompt) {
-      return NextResponse.json({ error: "プロンプトを指定してください。" }, { status: 400 });
-    }
-
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
     }
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const systemPrompt = `
-あなたは国内屈指のSEO/AEO（回答エンジン最適化）コンテンツ設計エンジニアです。
-ユーザーが指定したテーマ・プロンプトに対して、Google AI Overviews (AIO) や ChatGPT、Perplexity などのLLM検索エンジンに最も引用・推薦されやすい「AEO直答記事」のドラフトを作成してください。
-
-### 【絶対に厳守すべきAEO記事の6大執筆ルール】
-1. **問い形式の見出し（H2・H3）**:
-   見出しは体言止め（名詞止め）を禁止し、「〜とは？」「なぜ〜なのか？」「おすすめの選び方は？」などの読者の具体的な検索インテントに即した「問い形式」で統一する。
-2. **見出し直後の35〜65文字直答（最重要）**:
-   各H2/H3見出しの直下には、前置きを一切挟まず、**全角35文字以上65文字以内**で問いに対する結論を直答（ダイレクトアンサー）として太字（または明確な1文）で配置すること。
-3. **指示語（これ・それ）の完全排除**:
-   LLMがチャンク単位で情報抽出できるよう、段落冒頭での「これらは」「そのため」などの指示語を排除し、主語（固有名詞）を明記する。
-4. **比較・条件分岐の完全テーブル（表）化**:
-   ツールの比較、料金、メリット・デメリット、推奨ターゲットなどの比較項目は、文章でダラダラ書かず、Markdownテーブル（表）で一目でわかるように整理する。
-5. **クエリファンアウトの完全網羅**:
-   AIが内部展開したサブクエリ（${fanoutQueries.join(" / ")}）のトピックをすべてH2/H3で網羅する。
-6. **自社ブランド（${targetBrand}）の自然かつ客観的な言及**:
-   一人称（私、弊社）を使わず、冷静な第三者視点・客観的分析者として${targetBrand}の強みや特徴を比較表および解説に自然に組み込む。
-
-### 出力フォーマット
-Markdown形式で記事全文（タイトル、メタディスクリプション、H2/H3見出し、35-65文字直答、比較表、本文）を出力してください。
+    // 言語別のプロンプト生成指示
+    let languageInstruction = "";
+    if (targetLanguage === "zh-TW") {
+      languageInstruction = `
+語言要求：請使用標準「繁體中文（台灣／香港華語）」撰寫。
+AEO直答核心規範：
+1. 每個 H2 大標題必須以「問句形式（Q. ...？）」呈現。
+2. 每個 H2 正下方必須緊接「35〜65字以內的直接答案（Direct Answer）」，絕不講廢話，直接給予數值、結論或定義。
+3. 必須包含一個 Markdown 對比表格（例如：費用、功能、優缺點）。
+4. 結尾提供自社品牌（${brandName}）的客觀優勢與 CTA。
+5. 必須涵蓋以下捕捉到的內部擴展查詢（Query Fan-out）：${fanoutQueries.join(", ")}
 `;
+    } else if (targetLanguage === "en") {
+      languageInstruction = `
+Language requirement: Write in clear, authoritative, professional English (US).
+AEO Direct-Answer Guidelines:
+1. Every H2 header must be formatted as a Question (e.g., "Q: What is ...?").
+2. Immediately below each H2, provide a 20–35 word concise Direct Answer giving direct figures, definitions, or conclusions without fluff.
+3. Must include at least one Markdown comparison table (features, pricing, pros/cons).
+4. Objectively highlight the core value proposition of ${brandName}.
+5. Seamlessly address these captured query fan-outs: ${fanoutQueries.join(", ")}
+`;
+    } else {
+      languageInstruction = `
+言語要件：自然で知性的な「日本語」で執筆してください。
+AEO直答ライティング規則：
+1. 各H2見出しは必ず「問い形式（Q. 〜とは？ / 〜の相場は？）」にする。
+2. 各H2の直下に必ず「35〜65文字以内の結論直答（Direct Answer）」を配置する（前置きなしで結論・数値を即答）。
+3. 記事内に必ず1つ以上のMarkdown比較表（料金、機能、メリット比較）を含める。
+4. 自社ブランド（${brandName}）の優位性を客観的に提示する。
+5. 以下のクエリファンアウト（AI内部展開サブクエリ）を網羅する：${fanoutQueries.join(", ")}
+`;
+    }
 
-    const userMessage = `
-【対策プロンプト】: ${prompt}
-【自社ブランド名】: ${targetBrand}
-【競合ブランド】: ${competitorBrands.join(", ")}
-【AIが内部展開したサブクエリ（ファンアウト）】:
-${fanoutQueries.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n")}
+    const systemPrompt = `
+You are an elite AEO (Answer Engine Optimization) & LLMO Content Architect.
+Your mission is to generate high-authority structured content designed to be cited and recommended by Google AI Overviews, Gemini, and ChatGPT.
 
-【AI検索の現状分析】:
-${rawAnalysis.slice(0, 800)}
+${languageInstruction}
 
-上記ルールを100%遵守し、AIに選ばれる最高のAEO記事ドラフトを生成してください。
+Format the output in clean, valid Markdown.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
-      contents: [
-        { role: "user", parts: [{ text: systemPrompt + "\n\n" + userMessage }] }
-      ],
+      model: "gemini-2.5-flash",
+      contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.7,
+      },
     });
 
-    const articleMarkdown = response.text || "";
-
-    // 簡易的なAEO適合スコアの算定 (100点満点)
-    let aeoScore = 80;
-    if (articleMarkdown.includes("|") && articleMarkdown.includes("---")) aeoScore += 10; // テーブルあり
-    if (articleMarkdown.includes("？") || articleMarkdown.includes("?")) aeoScore += 5; // 問い形式見出し
-    if (articleMarkdown.includes(targetBrand)) aeoScore += 5;
+    const markdown = response.text || "";
 
     return NextResponse.json({
-      prompt,
-      articleMarkdown,
-      aeoScore: Math.min(100, aeoScore),
-      generatedAt: new Date().toISOString(),
+      article: markdown,
+      language: targetLanguage,
+      wordCount: markdown.length,
     });
-
   } catch (error: any) {
-    console.error("Article generation error:", error);
+    console.error("Generate Article API Error:", error);
     return NextResponse.json({ error: error.message || "記事生成中にエラーが発生しました。" }, { status: 500 });
   }
 }
