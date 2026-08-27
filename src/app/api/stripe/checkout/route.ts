@@ -2,10 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-const PLAN_PRICES: Record<string, { name: string; amount: number; credits: number }> = {
-  starter: { name: "GEO Explorer Starter プラン", amount: 9800, credits: 30 },
-  growth: { name: "GEO Explorer Growth プラン", amount: 29800, credits: 150 },
-  agency: { name: "GEO Explorer Agency プラン", amount: 79800, credits: 500 },
+// 言語・通貨別の正確なプラン価格定義 (おとり表示・為替不整合を完全排除)
+const PLAN_PRICES: Record<string, Record<string, { name: string; amount: number; currency: string; credits: number }>> = {
+  ja: {
+    starter: { name: "GEO Explorer Starter プラン", amount: 9800, currency: "jpy", credits: 30 },
+    growth: { name: "GEO Explorer Growth プラン", amount: 29800, currency: "jpy", credits: 150 },
+    agency: { name: "GEO Explorer Agency プラン", amount: 79800, currency: "jpy", credits: 500 },
+  },
+  "zh-TW": {
+    starter: { name: "GEO Explorer Starter 方案", amount: 2190, currency: "twd", credits: 30 },
+    growth: { name: "GEO Explorer Growth 方案", amount: 6590, currency: "twd", credits: 150 },
+    agency: { name: "GEO Explorer Agency 方案", amount: 17900, currency: "twd", credits: 500 },
+  },
+  en: {
+    starter: { name: "GEO Explorer Starter Plan", amount: 6900, currency: "usd", credits: 30 }, // $69.00
+    growth: { name: "GEO Explorer Growth Plan", amount: 19900, currency: "usd", credits: 150 }, // $199.00
+    agency: { name: "GEO Explorer Agency Plan", amount: 49900, currency: "usd", credits: 500 }, // $499.00
+  },
 };
 
 export async function POST(req: NextRequest) {
@@ -39,25 +52,26 @@ export async function POST(req: NextRequest) {
       apiVersion: "2023-10-16" as any,
     });
 
-    const { planId = "growth" } = await req.json();
-    const plan = PLAN_PRICES[planId];
-
-    if (!plan) {
-      return NextResponse.json({ error: "無効なプランです。" }, { status: 400 });
-    }
+    const { planId = "growth", lang = "ja" } = await req.json();
+    const langKey = PLAN_PRICES[lang] ? lang : "ja";
+    const plan = PLAN_PRICES[langKey][planId] || PLAN_PRICES["ja"]["growth"];
 
     const origin = req.headers.get("origin") || "https://geo.traditionalart.biz";
 
-    // 2. Stripe Checkout セッションを作成（orgId & userId をメタデータに完全注入）
+    // 2. Stripe Checkout セッションを作成（表示通貨・金額と完全に一致）
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
-            currency: "jpy",
+            currency: plan.currency,
             product_data: {
               name: plan.name,
-              description: `${plan.name}（月間 ${plan.credits} クレジット付与）`,
+              description: lang === "zh-TW" 
+                ? `${plan.name}（每月自動發放 ${plan.credits} 查詢額度）` 
+                : lang === "en" 
+                ? `${plan.name} (${plan.credits} Query Credits / month)` 
+                : `${plan.name}（月間 ${plan.credits} クレジット付与）`,
             },
             unit_amount: plan.amount,
             recurring: {
@@ -75,6 +89,7 @@ export async function POST(req: NextRequest) {
         planId,
         orgId,
         userId: user?.id || "",
+        currency: plan.currency,
       },
     };
 

@@ -15,7 +15,7 @@ export default function PricingPage() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, lang }),
       });
 
       const data = await res.json();
@@ -25,7 +25,7 @@ export default function PricingPage() {
         window.location.href = data.url;
       }
     } catch (err: any) {
-      alert("エラー: " + err.message);
+      alert("Error: " + err.message);
     } finally {
       setLoadingPlan(null);
     }

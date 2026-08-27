@@ -10,49 +10,37 @@ import {
   CheckCircle2, 
   Layers, 
   Globe, 
-  ShieldCheck,
-  Search,
-  ArrowRight
+  ShieldCheck, 
+  Search, 
+  ArrowRight 
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function CitationsPage() {
   const { lang, t } = useLanguage();
 
-  const topMedia = [
-    {
-      domain: "itmedia.co.jp",
-      name: "ITmedia ビジネスオンライン",
-      citations: 42,
-      category: "BtoBビジネス・IT",
-      authority: 88,
-      status: "Competitors cited",
-    },
-    {
-      domain: "toyokeizai.net",
-      name: "東洋経済オンライン",
-      citations: 35,
-      category: "経済・企業分析",
-      authority: 92,
-      status: "Competitors cited",
-    },
-    {
-      domain: "diamond.jp",
-      name: "ダイヤモンド・オンライン",
-      citations: 29,
-      category: "経営・ビジネス戦略",
-      authority: 90,
-      status: "Competitors cited",
-    },
-    {
-      domain: "boxil.jp",
-      name: "ボクシル (BOXIL SaaS)",
-      citations: 26,
-      category: "SaaS比較メディア",
-      authority: 82,
-      status: "High priority gap",
-    },
-  ];
+  const mediaData = {
+    ja: [
+      { domain: "itmedia.co.jp", name: "ITmedia ビジネスオンライン", citations: 42, category: "BtoBビジネス・IT", authority: 88 },
+      { domain: "toyokeizai.net", name: "東洋経済オンライン", citations: 35, category: "経済・企業分析", authority: 92 },
+      { domain: "diamond.jp", name: "ダイヤモンド・オンライン", citations: 29, category: "経営・ビジネス戦略", authority: 90 },
+      { domain: "boxil.jp", name: "ボクシル (BOXIL SaaS)", citations: 26, category: "SaaS比較メディア", authority: 82 },
+    ],
+    "zh-TW": [
+      { domain: "bnext.com.tw", name: "數位時代 BusinessNext", citations: 45, category: "科技與商業趨勢", authority: 89 },
+      { domain: "ithome.com.tw", name: "iThome 電腦報", citations: 38, category: "企業 IT 與資安", authority: 87 },
+      { domain: "technews.tw", name: "科技新報 TechNews", citations: 31, category: "產業深度分析", authority: 85 },
+      { domain: "inside.com.tw", name: "INSIDE 硬塞的網路趨勢", citations: 28, category: "網路創新與數位行銷", authority: 83 },
+    ],
+    en: [
+      { domain: "techcrunch.com", name: "TechCrunch", citations: 52, category: "Enterprise & Tech", authority: 94 },
+      { domain: "searchenginejournal.com", name: "Search Engine Journal", citations: 41, category: "SEO & Digital Strategy", authority: 89 },
+      { domain: "gartner.com", name: "Gartner Insights", citations: 36, category: "B2B Market Research", authority: 92 },
+      { domain: "forbes.com", name: "Forbes Business", citations: 33, category: "Management & Growth", authority: 93 },
+    ],
+  };
+
+  const topMedia = mediaData[lang] || mediaData.ja;
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
