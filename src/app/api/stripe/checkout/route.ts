@@ -11,7 +11,10 @@ export async function POST(req: NextRequest) {
   try {
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
-      return NextResponse.json({ error: "STRIPE_SECRET_KEY が設定されていません。" }, { status: 500 });
+      console.error("STRIPE_SECRET_KEY is missing in environment variables.");
+      return NextResponse.json({ 
+        error: "Vercelの環境変数に STRIPE_SECRET_KEY が設定されていません。Vercelダッシュボードの Settings > Environment Variables で設定を確認してください。" 
+      }, { status: 500 });
     }
 
     const stripe = new Stripe(stripeKey, {
@@ -25,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "無効なプランです。" }, { status: 400 });
     }
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    const origin = req.headers.get("origin") || "https://geo.traditionalart.biz";
 
     // Stripe サブスクリプション Checkout セッションの作成
     const session = await stripe.checkout.sessions.create({
