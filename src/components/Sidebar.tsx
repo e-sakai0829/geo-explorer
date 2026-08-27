@@ -121,22 +121,31 @@ export default function Sidebar() {
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-          <div className="flex items-center gap-2 truncate max-w-[150px]">
+          <Link href="/settings" className="flex items-center gap-2 truncate max-w-[140px] hover:text-slate-900 transition-colors">
             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
               <User className="w-3.5 h-3.5" />
             </div>
             <span className="truncate text-slate-700 font-medium text-[11px]">
               {userEmail || "酒井 栄二郎"}
             </span>
-          </div>
+          </Link>
           
-          <button
-            onClick={handleSignOut}
-            title="ログアウト"
-            className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Link 
+              href="/settings" 
+              title="アカウント設定" 
+              className="text-slate-400 hover:text-indigo-600 p-1 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </Link>
+            <button
+              onClick={handleSignOut}
+              title="ログアウト"
+              className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </aside>
