@@ -16,7 +16,10 @@ import {
   Check, 
   Sparkles,
   ArrowRight,
-  Globe
+  Globe,
+  AlertTriangle,
+  FileText,
+  Loader2
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -27,6 +30,7 @@ export default function SettingsPage() {
   const [targetDomain, setTargetDomain] = useState("https://ailo.jp");
   const [competitors, setCompetitors] = useState("Speak, プログリット, DMM英会話, ビズメイツ");
   const [saved, setSaved] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -42,6 +46,25 @@ export default function SettingsPage() {
     router.refresh();
   };
 
+  const handleOpenStripePortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "請求ポータルの起動に失敗しました。");
+
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      alert("請求ポータル接続エラー: " + err.message);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
   const handleSaveProject = (e: React.FormEvent) => {
     e.preventDefault();
     setSaved(true);
@@ -54,13 +77,13 @@ export default function SettingsPage() {
       <div>
         <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
           <Settings className="w-3.5 h-3.5" />
-          Account & Project Settings
+          Account & Subscription Settings
         </div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
           アカウント設定 ＆ サブスクリプション管理
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          アカウント情報、契約中のプラン、請求書・領収書の発行、追跡プロジェクトの基本設定
+          アカウント情報、契約中のプラン、クレジットカード変更、領収書発行、解約手続き
         </p>
       </div>
 
@@ -106,7 +129,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Subscription & Billing (Stripe Customer Portal) */}
+      {/* 2. Subscription & Self-Serve Cancellation (Stripe Portal) */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
@@ -117,17 +140,19 @@ export default function SettingsPage() {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Stripe による安全な自動更新サブスクリプション
+              いつでもワンクリックでプラン変更または解約が可能です
             </p>
           </div>
 
-          <Link
-            href="/pricing"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            プランを変更する
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              プランを変更
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -150,21 +175,38 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Self-Serve Cancellation & Billing Actions */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <CreditCard className="w-4 h-4 text-slate-500" />
-            <span className="text-slate-700">
-              クレジットカード情報の変更、領収書（PDF）の発行、プラン解約
-            </span>
+          <div className="space-y-0.5">
+            <div className="font-bold text-slate-800 flex items-center gap-1.5">
+              <CreditCard className="w-4 h-4 text-slate-600" />
+              請求・カード変更・解約手続き
+            </div>
+            <p className="text-[11px] text-slate-500">
+              クレジットカードの変更、領収書（インボイスPDF）の発行、サブスクリプションの自動更新停止（解約）
+            </p>
           </div>
 
-          <Link
-            href="/pricing"
-            className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 shrink-0"
+          <button
+            onClick={handleOpenStripePortal}
+            disabled={portalLoading}
+            className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
           >
-            Stripe 請求管理ポータルへ
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Link>
+            {portalLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ExternalLink className="w-3.5 h-3.5" />
+            )}
+            Stripe 請求・解約ポータル
+          </button>
+        </div>
+
+        {/* Cancellation Notice Banner */}
+        <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <strong>解約に関するポリシー:</strong> 解約ボタンを押した場合でも、既に支払われた当月の請求期間末日（次回更新日）までは引き続きすべての機能をご利用いただけます。違約金等は一切発生いたしません。
+          </div>
         </div>
       </div>
 
