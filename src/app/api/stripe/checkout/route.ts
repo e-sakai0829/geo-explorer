@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2023-10-16" as any,
-});
-
 const PLAN_PRICES: Record<string, { name: string; amount: number }> = {
   starter: { name: "GEO Explorer Starter プラン", amount: 9800 },
   growth: { name: "GEO Explorer Growth プラン", amount: 29800 },
@@ -13,6 +9,15 @@ const PLAN_PRICES: Record<string, { name: string; amount: number }> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      return NextResponse.json({ error: "STRIPE_SECRET_KEY が設定されていません。" }, { status: 500 });
+    }
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16" as any,
+    });
+
     const { planId = "growth" } = await req.json();
     const plan = PLAN_PRICES[planId];
 
