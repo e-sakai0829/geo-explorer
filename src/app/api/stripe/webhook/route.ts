@@ -59,16 +59,19 @@ export async function POST(req: NextRequest) {
 
       const monthlyCredits = PLAN_CREDITS[planId] || 30;
 
-      // 組織のプランとクレジットを反映
+      // 初回契約時は used_credits を 0 に初期化
+      const updateData = {
+        plan: planId,
+        monthly_credits: monthlyCredits,
+        used_credits: 0,
+        stripe_customer_id: customerId || null,
+        updated_at: new Date().toISOString(),
+      };
+
       if (orgId) {
         const { error: orgError } = await supabase
           .from("organizations")
-          .update({
-            plan: planId,
-            monthly_credits: monthlyCredits,
-            stripe_customer_id: customerId || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("id", orgId);
 
         if (orgError) {
@@ -77,12 +80,7 @@ export async function POST(req: NextRequest) {
       } else if (userId) {
         const { error: orgError } = await supabase
           .from("organizations")
-          .update({
-            plan: planId,
-            monthly_credits: monthlyCredits,
-            stripe_customer_id: customerId || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("user_id", userId);
 
         if (orgError) {
@@ -91,11 +89,7 @@ export async function POST(req: NextRequest) {
       } else if (customerId) {
         const { error: orgError } = await supabase
           .from("organizations")
-          .update({
-            plan: planId,
-            monthly_credits: monthlyCredits,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("stripe_customer_id", customerId);
 
         if (orgError) {
@@ -105,7 +99,32 @@ export async function POST(req: NextRequest) {
     }
 
     // ==========================================
-    // 2. プラン変更・解約イベント (customer.subscription.updated)
+    // 2. 毎月の更新請求成功イベント (invoice.payment_succeeded)
+    // ★ 2ヶ月目以降の月次クレジット自動リセット（used_credits: 0）
+    // ==========================================
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId = invoice.customer as string;
+      const billingReason = invoice.billing_reason;
+
+      // 毎月の自動更新請求（subscription_cycle）または初回契約時
+      if (customerId && (billingReason === "subscription_cycle" || billingReason === "subscription_create")) {
+        const { error: orgError } = await supabase
+          .from("organizations")
+          .update({
+            used_credits: 0, // 月次利用枠を 0 に完全リセット
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+
+        if (orgError) {
+          console.error("Failed to reset used_credits on invoice.payment_succeeded:", orgError);
+        }
+      }
+    }
+
+    // ==========================================
+    // 3. プラン変更イベント (customer.subscription.updated)
     // ==========================================
     if (event.type === "customer.subscription.updated") {
       const subscription = event.data.object as Stripe.Subscription;
@@ -121,9 +140,9 @@ export async function POST(req: NextRequest) {
         const currency = (subscription.items?.data?.[0]?.price?.currency || "jpy").toLowerCase();
 
         if (currency === "usd") {
-          if (priceAmount <= 7000) planId = "starter"; // $69
-          else if (priceAmount >= 40000) planId = "agency"; // $499
-          else planId = "growth"; // $199
+          if (priceAmount <= 7000) planId = "starter"; // $69 (6900)
+          else if (priceAmount >= 40000) planId = "agency"; // $499 (49900)
+          else planId = "growth"; // $199 (19900)
         } else if (currency === "twd") {
           if (priceAmount <= 250000) planId = "starter"; // NT$ 2,190 (219000)
           else if (priceAmount >= 1500000) planId = "agency"; // NT$ 17,900 (1790000)
@@ -150,6 +169,30 @@ export async function POST(req: NextRequest) {
 
         if (orgError) {
           console.error("Failed to update organization on subscription.updated:", orgError);
+        }
+      }
+    }
+
+    // ==========================================
+    // 4. 解約イベント (customer.subscription.deleted)
+    // ★ 解約時は即座に無料プラン（10クレジット）へダウングレード
+    // ==========================================
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+
+      if (customerId) {
+        const { error: orgError } = await supabase
+          .from("organizations")
+          .update({
+            plan: "starter",
+            monthly_credits: 10, // 無料初期枠へダウングレード
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+
+        if (orgError) {
+          console.error("Failed to downgrade organization on subscription.deleted:", orgError);
         }
       }
     }
