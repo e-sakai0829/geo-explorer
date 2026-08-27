@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase-browser";
 import { 
   LayoutDashboard, 
   Search, 
@@ -10,7 +12,9 @@ import {
   CreditCard, 
   Settings, 
   TrendingUp,
-  BookOpen
+  BookOpen,
+  LogOut,
+  User
 } from "lucide-react";
 
 const navigation = [
@@ -25,6 +29,23 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) {
+        setUserEmail(data.user.email);
+      }
+    });
+  }, [supabase]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  };
 
   return (
     <aside className="w-64 bg-white text-slate-700 flex flex-col h-screen fixed left-0 top-0 border-r border-slate-200/80 z-50 shadow-xs">
@@ -100,15 +121,22 @@ export default function Sidebar() {
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700">
-              JS
+          <div className="flex items-center gap-2 truncate max-w-[150px]">
+            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
+              <User className="w-3.5 h-3.5" />
             </div>
-            <span className="truncate max-w-[110px] text-slate-700 font-medium">酒井 栄二郎</span>
+            <span className="truncate text-slate-700 font-medium text-[11px]">
+              {userEmail || "酒井 栄二郎"}
+            </span>
           </div>
-          <Link href="/pricing" className="hover:text-slate-900">
-            <Settings className="w-3.5 h-3.5" />
-          </Link>
+          
+          <button
+            onClick={handleSignOut}
+            title="ログアウト"
+            className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </aside>
