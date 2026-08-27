@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import CookieBanner from "@/components/CookieBanner";
@@ -19,6 +19,9 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
   const { lang, setLang, t } = useLanguage();
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const [projectName, setProjectName] = useState("自社ブランド");
+  const [projectDomain, setProjectDomain] = useState("https://example.com");
+  const [credits, setCredits] = useState({ total: 10, used: 0, remaining: 10 });
 
   const languages: { code: Language; name: string; flag: string }[] = [
     { code: "ja", name: "日本語", flag: "🇯🇵" },
@@ -27,6 +30,35 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   ];
 
   const selectedLang = languages.find((l) => l.code === lang) || languages[0];
+
+  useEffect(() => {
+    if (!isFullPage) {
+      // プロジェクト設定をDBから取得
+      fetch("/api/user/project")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.project) {
+            setProjectName(data.project.name || "自社ブランド");
+            setProjectDomain(data.project.domain || "https://example.com");
+          }
+        })
+        .catch(() => {});
+
+      // クレジット残高をDBから取得
+      fetch("/api/user/credits")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && !data.error) {
+            setCredits({
+              total: data.monthly_credits,
+              used: data.used_credits,
+              remaining: data.remaining_credits,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isFullPage, pathname]);
 
   if (isFullPage) {
     return (
@@ -41,19 +73,19 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 antialiased font-sans">
       <Sidebar />
       <div className="flex-1 ml-64 min-h-screen flex flex-col">
-        {/* Top global header for App */}
+        {/* Top global header for App (DB動的データ連携) */}
         <header className="h-14 bg-white border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-40 shadow-xs">
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold text-slate-500">
               {lang === "zh-TW" ? "專案:" : lang === "en" ? "Project:" : "プロジェクト:"}
             </span>
-            <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
-              Ailo（AI英会話）- https://ailo.jp
+            <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 truncate max-w-xs">
+              {projectName} - {projectDomain}
             </span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            {/* Prominent Language Switcher (大きく目立つデザイン) */}
+            {/* Prominent Language Switcher */}
             <div className="relative">
               <button
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
@@ -62,7 +94,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
                 <Globe className="w-3.5 h-3.5 text-indigo-600" />
                 <span className="text-sm">{selectedLang.flag}</span>
                 <span>{selectedLang.name}</span>
-                <ChevronDown className="w-3 h-3 text-slate-500" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
               </button>
 
               {langMenuOpen && (
@@ -103,7 +135,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
             <span className="text-slate-500">
               {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
-              <strong className="text-slate-800">24 / 30 クエリ</strong>
+              <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
             </span>
           </div>
         </header>

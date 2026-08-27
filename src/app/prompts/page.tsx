@@ -18,9 +18,9 @@ import {
 import Link from "next/link";
 
 export default function PromptsPage() {
-  const [prompt, setPrompt] = useState("法人向けAI英会話 おすすめ比較");
-  const [brandName, setBrandName] = useState("Ailo");
-  const [competitors, setCompetitors] = useState(["Speak", "プログリット", "DMM英会話", "ビズメイツ"]);
+  const [prompt, setPrompt] = useState("");
+  const [brandName, setBrandName] = useState("自社ブランド");
+  const [competitors, setCompetitors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export default function PromptsPage() {
       .then((data) => {
         if (data?.project) {
           if (data.project.name) setBrandName(data.project.name);
-          if (Array.isArray(data.project.competitors) && data.project.competitors.length > 0) {
+          if (Array.isArray(data.project.competitors)) {
             setCompetitors(data.project.competitors);
           }
         }
@@ -100,7 +100,7 @@ export default function PromptsPage() {
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="例: 法人向けAI英会話 おすすめ比較"
+                  placeholder="例: 自社業界のおすすめ・比較・費用相場など"
                   required
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden transition-all font-medium"
                 />
@@ -119,7 +119,7 @@ export default function PromptsPage() {
           <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
             <span className="font-semibold text-slate-700">自社ブランド: <strong className="text-indigo-600">{brandName}</strong></span>
             <span>•</span>
-            <span className="font-semibold text-slate-700">追跡競合: <strong className="text-slate-800">{competitors.join(", ")}</strong></span>
+            <span className="font-semibold text-slate-700">追跡競合: <strong className="text-slate-800">{competitors.length > 0 ? competitors.join(", ") : "未設定"}</strong></span>
             <Link href="/settings" className="text-indigo-600 hover:underline text-[11px] ml-auto">
               プロジェクト設定で変更
             </Link>

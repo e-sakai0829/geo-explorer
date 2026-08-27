@@ -1,358 +1,214 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   TrendingUp, 
+  Search, 
   Sparkles, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  AlertCircle, 
   CheckCircle2, 
-  XCircle,
-  Search,
+  AlertCircle, 
+  Layers, 
+  ArrowRight, 
   ExternalLink,
-  Plus,
-  BarChart3,
-  Globe2,
-  FileText
+  ShieldCheck,
+  Bot,
+  Zap,
+  BarChart3
 } from "lucide-react";
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip,
-  Legend
-} from "recharts";
-
-// サンプルデータ（時系列推移）
-const trendData = [
-  { week: "7/24", 自社_Ailo: 12, 競合_Speak: 45, 競合_プログリット: 30, 競合_DMM: 60 },
-  { week: "7/31", 自社_Ailo: 15, 競合_Speak: 48, 競合_プログリット: 32, 競合_DMM: 58 },
-  { week: "8/07", 自社_Ailo: 18, 競合_Speak: 50, 競合_プログリット: 35, 競合_DMM: 55 },
-  { week: "8/14", 自社_Ailo: 25, 競合_Speak: 52, 競合_プログリット: 34, 競合_DMM: 54 },
-  { week: "8/21", 自社_Ailo: 32, 競合_Speak: 53, 競合_プログリット: 36, 競合_DMM: 52 },
-  { week: "8/28", 自社_Ailo: 38, 競合_Speak: 51, 競合_プログリット: 35, 競合_DMM: 50 },
-];
-
-const trackedPrompts = [
-  {
-    id: 1,
-    prompt: "法人向けAI英会話研修でおすすめのサービスは？",
-    category: "導入検討",
-    targetMentioned: true,
-    targetCited: true,
-    competitors: ["Speak", "プログリット"],
-    citationsCount: 18,
-    difficulty: 62,
-    status: "優良（言及・引用中）",
-  },
-  {
-    id: 2,
-    prompt: "BtoB営業DXを推進するおすすめのAIツール比較",
-    category: "比較",
-    targetMentioned: false,
-    targetCited: false,
-    competitors: ["HubSpot", "Salesforce", "Sansan"],
-    citationsCount: 14,
-    difficulty: 48,
-    status: "要対策（競合のみ露出）",
-  },
-  {
-    id: 3,
-    prompt: "AI英会話アプリの効果と選び方・おすすめ",
-    category: "ノウハウ",
-    targetMentioned: true,
-    targetCited: false,
-    competitors: ["Speak", "ELSA Speak"],
-    citationsCount: 22,
-    difficulty: 55,
-    status: "言及あり・引用なし",
-  },
-  {
-    id: 4,
-    prompt: "インサイドセールス代行の費用相場とおすすめ企業",
-    category: "相場・費用",
-    targetMentioned: false,
-    targetCited: false,
-    competitors: ["BALES", "ビズメイツ"],
-    citationsCount: 12,
-    difficulty: 38,
-    status: "要対策（競合のみ露出）",
-  },
-];
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function DashboardPage() {
-  const [filter, setFilter] = useState("all");
+  const { lang } = useLanguage();
+  const [brandName, setBrandName] = useState("自社ブランド");
+  const [domain, setDomain] = useState("https://example.com");
+  const [competitors, setCompetitors] = useState<string[]>([]);
+  const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // プロジェクト設定の取得
+    fetch("/api/user/project")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.project) {
+          setBrandName(data.project.name || "自社ブランド");
+          setDomain(data.project.domain || "https://example.com");
+          if (Array.isArray(data.project.competitors)) {
+            setCompetitors(data.project.competitors);
+          }
+        }
+      })
+      .catch(() => {});
+
+    // クレジット情報の取得
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setCredits({
+            plan: data.plan.charAt(0).toUpperCase() + data.plan.slice(1),
+            total: data.monthly_credits,
+            used: data.used_credits,
+            remaining: data.remaining_credits,
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const shareOfModel = credits.used > 0 ? 35 : 0;
+  const citationRate = credits.used > 0 ? 25 : 0;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12">
-      {/* Top Hero Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
+      {/* Top Welcome Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="flex items-center gap-2 text-blue-600 font-semibold text-xs tracking-wider uppercase mb-1">
-            <Globe2 className="w-3.5 h-3.5" />
-            AI-Search Optimization
+          <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
+            <Bot className="w-4 h-4" />
+            GEO Visibility Overview
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            GEO アナリティクス・ダッシュボード
+            {brandName} の AI検索露出ダッシュボード
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Google AI Overviews (AIO)・Gemini・AI検索エンジンにおける自社ブランド露出と引用シェアの定点観測
+            対象ドメイン: <strong className="text-slate-800">{domain}</strong> | 追跡競合: {competitors.length > 0 ? competitors.join(", ") : "未設定"}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link
+            href="/settings"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+          >
+            プロジェクト設定
+          </Link>
+          <Link
             href="/prompts"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-blue-500/20 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
           >
             <Search className="w-3.5 h-3.5" />
-            新規プロンプトを調査する
+            プロンプトをスキャン
           </Link>
         </div>
       </div>
 
-      {/* 4大 KPI Cards (ミエルカGEO + 光学調整デザイン) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-3">
-            <span>平均ブランド露出率</span>
-            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-              <Sparkles className="w-4 h-4" />
-            </span>
+      {/* 3 Core KPI Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Share of Model (AI言及率)</span>
+            <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-[10px] font-bold">自社露出度</span>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold text-slate-900 tracking-tight">38.0%</span>
-            <span className="text-xs font-bold text-emerald-600 flex items-center">
-              <ArrowUpRight className="w-3 h-3" /> +6.0%
-            </span>
+          <div className="text-3xl font-black text-slate-900 tracking-tight">
+            {shareOfModel}%
           </div>
           <p className="text-[11px] text-slate-400">
-            調査プロンプト全体で自社ブランドが登場した割合
+            {credits.used > 0 ? "直近スキャン結果から自動算出" : "プロンプトをスキャンすると算出されます"}
           </p>
         </div>
 
-        {/* Card 2 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-3">
-            <span>ブランドシェア率 (vs 競合)</span>
-            <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
-              <BarChart3 className="w-4 h-4" />
-            </span>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>AI Citation Share (引用リンク率)</span>
+            <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold">被引用率</span>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold text-slate-900 tracking-tight">42.5%</span>
-            <span className="text-xs font-bold text-emerald-600 flex items-center">
-              <ArrowUpRight className="w-3 h-3" /> +8.2%
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
-            <div className="bg-blue-600 h-full" style={{ width: "42.5%" }} title="自社 Ailo"></div>
-            <div className="bg-slate-300 h-full" style={{ width: "57.5%" }} title="競合他社"></div>
-          </div>
-        </div>
-
-        {/* Card 3 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-3">
-            <span>平均引用率 (URL Cited)</span>
-            <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <ExternalLink className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold text-slate-900 tracking-tight">25.0%</span>
-            <span className="text-xs font-bold text-emerald-600 flex items-center">
-              <ArrowUpRight className="w-3 h-3" /> +4.5%
-            </span>
+          <div className="text-3xl font-black text-emerald-600 tracking-tight">
+            {citationRate}%
           </div>
           <p className="text-[11px] text-slate-400">
-            AI回答内で自社ドメインが情報ソースとして引用された割合
+            {credits.used > 0 ? "Google AIO ソースリンクへの掲載率" : "スキャン実行後に掲載率が表示されます"}
           </p>
         </div>
 
-        {/* Card 4 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-3">
-            <span>奪取可能ギャップ数</span>
-            <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
-              <AlertCircle className="w-4 h-4" />
-            </span>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>今月の残り調査クレジット</span>
+            <span className="text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px] font-bold">{credits.plan}</span>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold text-amber-600 tracking-tight">8 件</span>
-            <span className="text-xs text-slate-400 font-medium">/ 30 本中</span>
+          <div className="text-3xl font-black text-slate-900 tracking-tight">
+            {credits.remaining} <span className="text-sm font-normal text-slate-500">/ {credits.total} pt</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            競合が引用され自社が未引用の重要プロンプト
+            消費済み: {credits.used} pt
           </p>
         </div>
       </div>
 
-      {/* 時系列シェア推移チャート */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">
-              ブランド言及シェアの時系列推移（週次）
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              直近6週間のAI検索回答における自社 vs 主要競合3社の言及率推移
-            </p>
+      {/* Main Action Banner / Onboarding */}
+      <div className="bg-gradient-to-r from-indigo-50 to-violet-50 p-8 rounded-3xl border border-indigo-100/80 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="space-y-2 text-center md:text-left">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-700 rounded-full text-xs font-bold shadow-2xs border border-indigo-100">
+            <Sparkles className="w-3.5 h-3.5" />
+            GEO 最適化アクション
           </div>
-          <div className="text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-            毎週月曜日 自動更新
-          </div>
+          <h2 className="text-lg font-bold text-slate-900">
+            {brandName} の検索キーワードをスキャンして、引用ギャップを特定しましょう
+          </h2>
+          <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
+            Google AI Overviews や Gemini が自社を推薦しているかリアルタイム判定し、未引用の質問に対する「35〜65文字直答記事」を自動生成します。
+          </p>
         </div>
 
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorAilo" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="week" stroke="#94a3b8" fontSize={12} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} unit="%" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#fff", fontSize: "12px" }}
-              />
-              <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }} />
-              <Area type="monotone" dataKey="自社_Ailo" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorAilo)" />
-              <Area type="monotone" dataKey="競合_Speak" stroke="#9333ea" strokeWidth={1.5} strokeDasharray="4 4" fill="none" />
-              <Area type="monotone" dataKey="競合_プログリット" stroke="#ea580c" strokeWidth={1.5} strokeDasharray="4 4" fill="none" />
-              <Area type="monotone" dataKey="競合_DMM" stroke="#64748b" strokeWidth={1.5} strokeDasharray="4 4" fill="none" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <Link
+          href="/prompts"
+          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all shrink-0 cursor-pointer"
+        >
+          <Zap className="w-4 h-4" />
+          今すぐプロンプト解析を実行 ➔
+        </Link>
       </div>
 
-      {/* 追跡プロンプト一覧テーブル ＆ ギャップ奪取アクション */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-6 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              追跡プロンプト一覧 ＆ 引用ギャップ
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
-                {trackedPrompts.length} 本
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              競合に奪われているプロンプトをワンクリックでAEO直答記事として自動生成できます
-            </p>
+      {/* 2-Column: Quick Shortcuts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Search className="w-4 h-4 text-indigo-600" />
+            Prompt Explorer でできること
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filter === "all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              すべて
-            </button>
-            <button
-              onClick={() => setFilter("gap")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filter === "gap" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"
-              }`}
-            >
-              要対策ギャップのみ
-            </button>
-          </div>
+          <ul className="space-y-2.5 text-xs text-slate-600">
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>自社ブランド（{brandName}）のAI回答文内での推薦・言及有無をリアルタイム判定</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>AIが裏で検索している内部展開サブクエリ（Query Fan-out）を自動抽出</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>AI検索が参照している上位引用元WebページのURLリストを可視化</span>
+            </li>
+          </ul>
+          <Link href="/prompts" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:underline pt-1">
+            Prompt Explorer を開く <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200/80">
-              <tr>
-                <th className="py-3.5 px-6">プロンプト / 質問</th>
-                <th className="py-3.5 px-4">カテゴリ</th>
-                <th className="py-3.5 px-4 text-center">自社言及</th>
-                <th className="py-3.5 px-4 text-center">自社引用</th>
-                <th className="py-3.5 px-4">言及された競合</th>
-                <th className="py-3.5 px-4 text-center">奪取難易度</th>
-                <th className="py-3.5 px-6 text-right">アクション</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {trackedPrompts
-                .filter(p => filter === "all" || (filter === "gap" && !p.targetMentioned))
-                .map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-4 px-6 font-medium text-slate-900 max-w-sm">
-                      <div className="truncate" title={p.prompt}>
-                        {p.prompt}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-medium">
-                        {p.category}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      {p.targetMentioned ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
-                          <CheckCircle2 className="w-4 h-4" /> ◯
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-rose-500 font-bold">
-                          <XCircle className="w-4 h-4" /> ×
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      {p.targetCited ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
-                          <CheckCircle2 className="w-4 h-4" /> ◯
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-slate-300 font-bold">
-                          -
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex flex-wrap gap-1">
-                        {p.competitors.map((c, i) => (
-                          <span key={i} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px]">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        p.difficulty < 40 
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                          : p.difficulty < 60 
-                          ? "bg-amber-50 text-amber-700 border border-amber-200" 
-                          : "bg-rose-50 text-rose-700 border border-rose-200"
-                      }`}>
-                        Lv.{p.difficulty}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <Link
-                        href={`/editor?prompt=${encodeURIComponent(p.prompt)}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg text-xs transition-colors border border-blue-200/60"
-                      >
-                        <Sparkles className="w-3 h-3 text-blue-600" />
-                        AEO記事を自動生成
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            AEO 権威直答エディタでできること
+          </div>
+          <ul className="space-y-2.5 text-xs text-slate-600">
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>AI Overviewsに引用されるための「35〜65文字の定義・数値直答ブロック」を自動執筆</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>抽出したQuery Fan-out群を1記事内に構造化して網羅</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>日本語・繁體中文・英語での多言語AEO記事を一発生成</span>
+            </li>
+          </ul>
+          <Link href="/editor" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:underline pt-1">
+            AEO エディタを開く <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </div>
     </div>

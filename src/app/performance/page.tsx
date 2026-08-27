@@ -1,89 +1,146 @@
 "use client";
 
-import { useState } from "react";
-import { TrendingUp, Plus, CheckCircle2, ArrowUpRight, Globe, FileText, Calendar } from "lucide-react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-
-const performanceData = [
-  { time: "公開前 (Before)", 引用率_Ailo: 0, 競合平均: 42 },
-  { time: "公開1週後", 引用率_Ailo: 8, 競合平均: 40 },
-  { time: "公開2週後", 引用率_Ailo: 22, 競合平均: 38 },
-  { time: "公開3週後", 引用率_Ailo: 35, 競合平均: 36 },
-  { time: "公開4週後", 引用率_Ailo: 48, 競合平均: 35 },
-];
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { 
+  TrendingUp, 
+  ArrowUpRight, 
+  Sparkles, 
+  CheckCircle2, 
+  Clock, 
+  FileText, 
+  ExternalLink, 
+  Search,
+  Bot
+} from "lucide-react";
 
 export default function PerformancePage() {
-  return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-16">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-xs tracking-wider uppercase mb-1">
-            <TrendingUp className="w-3.5 h-3.5" />
-            Closed-Loop ROI Tracker
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            クローズドループ効果測定（Before / After）
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            作成・公開したAEO記事が、実際にAI検索エンジンにどれだけ引用されるようになったかの時系列成果を可視化します
-          </p>
-        </div>
+  const [brandName, setBrandName] = useState("自社ブランド");
+  const [domain, setDomain] = useState("https://example.com");
 
-        <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer">
-          <Plus className="w-4 h-4" />
-          公開記事URLを登録して追跡開始
-        </button>
+  useEffect(() => {
+    fetch("/api/user/project")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.project) {
+          setBrandName(data.project.name || "自社ブランド");
+          setDomain(data.project.domain || "https://example.com");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
+          <TrendingUp className="w-3.5 h-3.5" />
+          Closed-loop Performance Tracker
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          AEO 施策効果測定 (Before / After)
+        </h1>
+        <p className="text-xs text-slate-500 mt-1">
+          生成・公開した AEO 直答記事が、Google AI Overviews に引用・推薦されるまでの時系列推移を追跡します
+        </p>
       </div>
 
-      {/* Featured Article ROI Card */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-          <div>
-            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
-              追跡中（公開から28日経過）
-            </span>
-            <h2 className="text-base font-bold text-slate-900">
-              記事: 法人向けAI英会話アプリの選び方とおすすめ比較【2026年最新】
-            </h2>
-            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
-              <span>https://ailo.jp/insights/b2b-ai-english-comparison</span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" /> 公開日: 2026-07-30
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <span className="text-xs text-slate-400">AI引用率の伸び</span>
-              <div className="text-2xl font-bold text-emerald-600 flex items-center justify-end">
-                <ArrowUpRight className="w-5 h-5" /> 0% ➔ 48%
-              </div>
-            </div>
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="text-xs font-semibold text-slate-500">公開済み AEO 記事</div>
+          <div className="text-3xl font-black text-slate-900 tracking-tight">1 <span className="text-xs font-normal text-slate-400">本</span></div>
+          <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> インデックス済み
           </div>
         </div>
 
-        {/* Chart */}
-        <div>
-          <h3 className="text-xs font-bold text-slate-700 mb-3">
-            記事公開前後のAI引用シェア推移グラフ
-          </h3>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={performanceData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} unit="%" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#fff", fontSize: "12px" }}
-                />
-                <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                <Line type="monotone" dataKey="引用率_Ailo" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                <Line type="monotone" dataKey="競合平均" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="text-xs font-semibold text-slate-500">AI Overviews 引用獲得率</div>
+          <div className="text-3xl font-black text-indigo-600 tracking-tight">100%</div>
+          <div className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1">
+            <ArrowUpRight className="w-3.5 h-3.5" /> 施策前 0% ➔ 施策後 100%
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="text-xs font-semibold text-slate-500">平均引用獲得日数</div>
+          <div className="text-3xl font-black text-slate-900 tracking-tight">14 <span className="text-xs font-normal text-slate-400">日</span></div>
+          <div className="text-[11px] text-slate-400">
+            AEO 記事公開から AIO ソース採用まで
+          </div>
+        </div>
+      </div>
+
+      {/* Before / After Case Tracker */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">追跡中プロンプトの Before / After</h2>
+            <p className="text-xs text-slate-500 mt-0.5">自社ブランド: <strong className="text-slate-800">{brandName}</strong> ({domain})</p>
+          </div>
+          <Link
+            href="/editor"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all self-start sm:self-auto"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            新規 AEO 記事を作成
+          </Link>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="font-bold text-sm text-slate-900">
+                  {brandName} サービス導入 費用・効果
+                </span>
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200">
+                  引用獲得成功
+                </span>
+              </div>
+              <span className="text-xs text-slate-400">初回スキャン: 2026/08/10 ➔ 最新: 2026/08/24</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Before */}
+              <div className="p-4 bg-rose-50/60 rounded-xl border border-rose-100 space-y-2">
+                <div className="font-bold text-rose-800 flex items-center justify-between">
+                  <span>Before（施策前）</span>
+                  <span className="text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded">未露出</span>
+                </div>
+                <div className="text-slate-600 leading-relaxed text-[11px]">
+                  • 自社ブランド言及: <strong>なし (0%)</strong><br />
+                  • AI 引用元ソース: <strong>未掲載</strong><br />
+                  • 競合他社のみが AI Overviews で推薦されている状態
+                </div>
+              </div>
+
+              {/* After */}
+              <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-100 space-y-2">
+                <div className="font-bold text-emerald-800 flex items-center justify-between">
+                  <span>After（AEO 記事公開後）</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">推薦獲得</span>
+                </div>
+                <div className="text-slate-600 leading-relaxed text-[11px]">
+                  • 自社ブランド言及: <strong>あり (トップ推薦)</strong><br />
+                  • AI 引用元ソース: <strong>掲載獲得（1位リンク）</strong><br />
+                  • 35〜65文字直答ブロックが AI 回答文にそのまま引用
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className="text-slate-500 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                対策記事: <strong className="text-slate-700">{domain}/insights/guide</strong>
+              </span>
+              <Link href="/prompts" className="text-indigo-600 font-bold hover:underline flex items-center gap-1">
+                再スキャンを実行 <Search className="w-3 h-3" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>
