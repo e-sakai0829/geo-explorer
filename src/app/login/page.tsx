@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { Sparkles, Mail, Lock, Loader2, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -22,7 +23,11 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     });
-  }, [supabase, router]);
+
+    if (searchParams.get("error")) {
+      setMessage({ type: "error", text: "認証に失敗しました。もう一度お試しください。" });
+    }
+  }, [supabase, router, searchParams]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +38,6 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // 新規登録
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -47,7 +51,6 @@ export default function LoginPage() {
           text: "確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。",
         });
       } else {
-        // ログイン
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -80,7 +83,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="-m-8 min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans antialiased text-slate-900">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans antialiased text-slate-900">
       {/* Top Back Link */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md px-4 mb-4">
         <Link
@@ -231,5 +234,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

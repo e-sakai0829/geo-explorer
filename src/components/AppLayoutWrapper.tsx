@@ -1,18 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
-import { Globe, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 export default function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/";
+  // LP（/）およびログイン画面（/login）はサイドバーなしの全画面表示
+  const isFullPage = pathname === "/" || pathname === "/login";
+  
   const [currentLang, setCurrentLang] = useState("ja");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
-  if (isLandingPage) {
-    return <div className="min-h-screen w-full">{children}</div>;
+  if (isFullPage) {
+    return <div className="min-h-screen w-full bg-white">{children}</div>;
   }
 
   const languages = [
@@ -57,7 +59,7 @@ export default function AppLayoutWrapper({ children }: { children: React.ReactNo
                         setCurrentLang(l.code);
                         setLangMenuOpen(false);
                       }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
                       <span>{l.flag}</span>
                       <span>{l.name}</span>
