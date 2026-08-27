@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       prompt, 
       brandName = "自社ブランド", 
       competitors = [],
-      targetLocale = "ja-JP"
+      targetLocale = "ja"
     } = await req.json();
 
     if (!prompt) {
@@ -70,10 +70,20 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
+    // 4. ロケール別のSearch Grounding指示
+    let scanPrompt = "";
+    if (targetLocale === "zh-TW") {
+      scanPrompt = `請針對以下繁體中文搜尋詞，檢索最新台灣及香港地區之 Google 搜尋結果，並以 Google AI Overviews 方式輸出精準摘要、推薦品牌及關鍵引用來源：\n\n查詢詞: "${prompt}"`;
+    } else if (targetLocale === "en") {
+      scanPrompt = `Perform a live web search simulation for Google AI Overviews in the US market for the following commercial query. Provide comprehensive answers, brand recommendations, and key source citations:\n\nQuery: "${prompt}"`;
+    } else {
+      scanPrompt = `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`;
+    }
+
+    // Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`,
+      contents: scanPrompt,
       config: {
         tools: [{ googleSearch: {} }],
         temperature: 0.2,
@@ -89,14 +99,14 @@ export async function POST(req: NextRequest) {
     const webSources = searchChunks
       .filter((chunk: any) => chunk.web?.uri)
       .map((chunk: any) => ({
-        title: chunk.web.title || "引用元ページ",
+        title: chunk.web.title || (targetLocale === "zh-TW" ? "引用來源網頁" : targetLocale === "en" ? "Cited Web Source" : "引用元ページ"),
         url: chunk.web.uri,
       }));
 
     const searchQueries = groundingMetadata?.webSearchQueries || [
-      `${prompt} 費用`,
-      `${prompt} メリット`,
-      `${prompt} 比較`,
+      `${prompt} ${targetLocale === "zh-TW" ? "費用" : targetLocale === "en" ? "pricing" : "費用"}`,
+      `${prompt} ${targetLocale === "zh-TW" ? "優點" : targetLocale === "en" ? "benefits" : "メリット"}`,
+      `${prompt} ${targetLocale === "zh-TW" ? "評比" : targetLocale === "en" ? "comparison" : "比較"}`,
     ];
 
     const brandMentioned = text.toLowerCase().includes(brandName.toLowerCase());

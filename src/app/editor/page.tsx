@@ -19,16 +19,20 @@ import { useLanguage } from "@/context/LanguageContext";
 
 function EditorInner() {
   const searchParams = useSearchParams();
-  const { lang: uiLang } = useLanguage();
+  const { lang: uiLang, t } = useLanguage();
 
   const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
   const [fanoutQueries, setFanoutQueries] = useState<string[]>([]);
-  const [targetLanguage, setTargetLanguage] = useState<"ja" | "zh-TW" | "en">("ja");
+  const [targetLanguage, setTargetLanguage] = useState<"ja" | "zh-TW" | "en">(uiLang);
   const [article, setArticle] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTargetLanguage(uiLang);
+  }, [uiLang]);
 
   // DBからプロジェクト設定を取得
   useEffect(() => {
@@ -102,10 +106,10 @@ function EditorInner() {
           AEO Authority Direct-Answer Generator
         </div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          AEO 権威直答記事エディタ
+          {t.editor_title}
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          AI Overviews ＆ Gemini に引用されるための「35〜65文字直答ブロック」「比較表」「ファンアウト網羅」を自動執筆（1クエリ消費）
+          {t.editor_desc}
         </p>
       </div>
 
@@ -115,7 +119,7 @@ function EditorInner() {
           <form onSubmit={handleGenerate} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                ターゲット検索プロンプト <span className="text-rose-500">*</span>
+                {t.editor_target_prompt} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -128,7 +132,7 @@ function EditorInner() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">自社ブランド名</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">{t.editor_brand_name}</label>
               <input
                 type="text"
                 value={brandName}
@@ -139,7 +143,7 @@ function EditorInner() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">執筆言語</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">{t.editor_lang_label}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -180,7 +184,7 @@ function EditorInner() {
             {/* Fan-out queries */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                網羅する内部展開クエリ（Fan-out）
+                {t.editor_fanout_label}
               </label>
               {fanoutQueries.length > 0 ? (
                 <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
@@ -193,7 +197,11 @@ function EditorInner() {
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-400 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                  Prompt Explorer から自動引き継ぎ、またはAIが自動補完します
+                  {uiLang === "zh-TW" 
+                    ? "可由 Prompt Explorer 自動帶入，或由 AI 智慧補充" 
+                    : uiLang === "en" 
+                    ? "Carried over from Prompt Explorer or auto-filled by AI" 
+                    : "Prompt Explorer から自動引き継ぎ、またはAIが自動補完します"}
                 </p>
               )}
             </div>
@@ -210,7 +218,7 @@ function EditorInner() {
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {loading ? "AEO直答記事を生成中..." : "AI記事を自動生成する（1枠消費）"}
+              {loading ? t.editor_generating : t.editor_btn_generate}
             </button>
           </form>
         </div>
@@ -221,7 +229,7 @@ function EditorInner() {
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-bold text-slate-900">生成された AEO 直答記事（Markdown）</span>
+                <span className="text-xs font-bold text-slate-900">{t.editor_preview_title}</span>
               </div>
 
               {article && (
@@ -230,7 +238,7 @@ function EditorInner() {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
                 >
                   {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? "コピー完了！" : "Markdown をコピー"}
+                  {copied ? t.editor_copied : t.editor_copy_btn}
                 </button>
               )}
             </div>
@@ -246,7 +254,7 @@ function EditorInner() {
                     <Sparkles className="w-6 h-6" />
                   </div>
                   <p className="text-xs max-w-sm">
-                    左側のフォームにプロンプトを入力して「記事を自動生成する」を実行すると、35〜65文字直答ブロック付きのAEO記事がここに表示されます。
+                    {t.editor_empty_guide}
                   </p>
                 </div>
               )}

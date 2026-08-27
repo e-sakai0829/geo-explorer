@@ -21,10 +21,12 @@ import {
   FileText, 
   Loader2 
 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { lang, t } = useLanguage();
   const [userEmail, setUserEmail] = useState<string>("");
   const [targetBrand, setTargetBrand] = useState("自社ブランド");
   const [targetDomain, setTargetDomain] = useState("https://example.com");
@@ -46,7 +48,7 @@ export default function SettingsPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.project) {
-          setTargetBrand(data.project.name || "自社ブランド");
+          setTargetBrand(data.project.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
           setTargetDomain(data.project.domain || "https://example.com");
           setCompetitors(
             Array.isArray(data.project.competitors) && data.project.competitors.length > 0
@@ -67,12 +69,12 @@ export default function SettingsPage() {
             total: data.monthly_credits,
             used: data.used_credits,
             remaining: data.remaining_credits,
-            resetAt: data.credits_reset_at ? new Date(data.credits_reset_at).toLocaleDateString("ja-JP") : "2026-09-27",
+            resetAt: data.credits_reset_at ? new Date(data.credits_reset_at).toLocaleDateString(lang === "zh-TW" ? "zh-TW" : lang === "en" ? "en-US" : "ja-JP") : "2026-09-27",
           });
         }
       })
       .catch(() => {});
-  }, [supabase]);
+  }, [supabase, lang]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -132,10 +134,10 @@ export default function SettingsPage() {
           Account & Subscription Settings
         </div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          アカウント設定 ＆ サブスクリプション管理
+          {t.set_title}
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          アカウント情報、契約中のプラン、クレジットカード変更、領収書発行、プロジェクト設定（DB保存）
+          {t.set_desc}
         </p>
       </div>
 
@@ -147,7 +149,7 @@ export default function SettingsPage() {
               <User className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">ログインアカウント</h2>
+              <h2 className="text-sm font-bold text-slate-900">{t.set_account_title}</h2>
               <p className="text-xs text-slate-500">{userEmail || "未設定"}</p>
             </div>
           </div>
@@ -157,13 +159,13 @@ export default function SettingsPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-lg transition-colors border border-rose-200 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            ログアウト
+            {t.logout}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-500 mb-1">メールアドレス</label>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t.set_email_label}</label>
             <input
               type="text"
               value={userEmail}
@@ -172,10 +174,14 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-slate-500 mb-1">アカウント権限</label>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+              {lang === "zh-TW" ? "帳戶權限" : lang === "en" ? "Role" : "アカウント権限"}
+            </label>
             <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-between">
-              <span>オーナー (Owner)</span>
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono">管理者</span>
+              <span>{lang === "zh-TW" ? "擁有者 (Owner)" : lang === "en" ? "Owner" : "オーナー (Owner)"}</span>
+              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono">
+                {lang === "zh-TW" ? "管理員" : lang === "en" ? "Admin" : "管理者"}
+              </span>
             </div>
           </div>
         </div>
@@ -186,13 +192,17 @@ export default function SettingsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900">契約中のサブスクリプション</h2>
+              <h2 className="text-sm font-bold text-slate-900">{t.set_sub_title}</h2>
               <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                契約中 (Active)
+                {t.active}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              いつでもワンクリックでプラン変更または解約が可能です
+              {lang === "zh-TW" 
+                ? "可隨時透過 Stripe 平台一鍵變更方案或取消自動續訂" 
+                : lang === "en" 
+                ? "Manage your subscription, update cards, or cancel anytime" 
+                : "いつでもワンクリックでプラン変更または解約が可能です"}
             </p>
           </div>
 
@@ -202,28 +212,34 @@ export default function SettingsPage() {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              プランを変更
+              {t.upgrade}
             </Link>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="text-[11px] text-slate-500 mb-1">現在のプラン</div>
-            <div className="text-base font-bold text-slate-900">{credits.plan} プラン</div>
-            <div className="text-xs text-indigo-600 font-semibold mt-0.5">Stripe 自動更新</div>
+            <div className="text-[11px] text-slate-500 mb-1">{t.set_current_plan}</div>
+            <div className="text-base font-bold text-slate-900">{credits.plan}</div>
+            <div className="text-xs text-indigo-600 font-semibold mt-0.5">Stripe Recurring</div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="text-[11px] text-slate-500 mb-1">今月の残りクレジット</div>
+            <div className="text-[11px] text-slate-500 mb-1">
+              {lang === "zh-TW" ? "本月剩餘額度" : lang === "en" ? "Remaining Credits" : "今月の残りクレジット"}
+            </div>
             <div className="text-base font-bold text-slate-900">{credits.remaining} / {credits.total} pt</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">次回リセット: {credits.resetAt}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              {lang === "zh-TW" ? "下次額度重置: " : lang === "en" ? "Renews on: " : "次回リセット: "}{credits.resetAt}
+            </div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="text-[11px] text-slate-500 mb-1">消費済みクレジット</div>
+            <div className="text-[11px] text-slate-500 mb-1">
+              {lang === "zh-TW" ? "已使用額度" : lang === "en" ? "Used Credits" : "消費済みクレジット"}
+            </div>
             <div className="text-base font-bold text-emerald-600">{credits.used} pt</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">実API解析消費</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Live AI API Calls</div>
           </div>
         </div>
 
@@ -232,10 +248,14 @@ export default function SettingsPage() {
           <div className="space-y-0.5">
             <div className="font-bold text-slate-800 flex items-center gap-1.5">
               <CreditCard className="w-4 h-4 text-slate-600" />
-              請求・カード変更・解約手続き
+              {lang === "zh-TW" ? "帳單、信用卡變更與解約管理" : lang === "en" ? "Billing, Invoices & Cancellation" : "請求・カード変更・解約手続き"}
             </div>
             <p className="text-[11px] text-slate-500">
-              クレジットカードの変更、領収書（インボイスPDF）の発行、サブスクリプションの解約
+              {lang === "zh-TW" 
+                ? "變更信用卡、下載發票收據（PDF）、隨時取消自動續訂" 
+                : lang === "en" 
+                ? "Update payment method, download PDF invoices, or cancel subscription" 
+                : "クレジットカードの変更、領収書（インボイスPDF）の発行、サブスクリプションの解約"}
             </p>
           </div>
 
@@ -249,7 +269,7 @@ export default function SettingsPage() {
             ) : (
               <ExternalLink className="w-3.5 h-3.5" />
             )}
-            Stripe 請求・解約ポータル
+            {t.set_stripe_portal_btn}
           </button>
         </div>
       </div>
@@ -257,9 +277,13 @@ export default function SettingsPage() {
       {/* 3. Project Configuration (DB実保存) */}
       <form onSubmit={handleSaveProject} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
         <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold text-slate-900">追跡プロジェクト設定</h2>
+          <h2 className="text-sm font-bold text-slate-900">{t.set_proj_title}</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            AI検索で自社として判定するブランド名と、追跡対象の競合リストを設定します（DB保存）
+            {lang === "zh-TW" 
+              ? "設定自社品牌名稱與追蹤競品清單（即時儲存至資料庫）" 
+              : lang === "en" 
+              ? "Configure your brand identity and competitor tracking list (persisted in DB)" 
+              : "AI検索で自社として判定するブランド名と、追跡対象の競合リストを設定します（DB保存）"}
           </p>
         </div>
 
@@ -267,13 +291,13 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                自社ブランド名 <span className="text-rose-500">*</span>
+                {t.set_proj_brand_label} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={targetBrand}
                 onChange={(e) => setTargetBrand(e.target.value)}
-                placeholder="例: トラディショナルアート / 自社サービス名"
+                placeholder="例: Traditionalart / Your Brand"
                 required
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
               />
@@ -281,7 +305,7 @@ export default function SettingsPage() {
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                自社WebサイトURL <span className="text-rose-500">*</span>
+                {t.set_proj_domain_label} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="url"
@@ -296,17 +320,21 @@ export default function SettingsPage() {
 
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              追跡する競合ブランドリスト（カンマ区切り）
+              {t.set_proj_comp_label}
             </label>
             <input
               type="text"
               value={competitors}
               onChange={(e) => setCompetitors(e.target.value)}
-              placeholder="例: 競合A社, 競合B社, 競合C社"
+              placeholder="例: Competitor A, Competitor B, Competitor C"
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
             />
             <p className="text-[10px] text-slate-400 mt-1">
-              AI検索の回答文中にこれらの競合名が登場した際、競合シェアとして自動集計されます。
+              {lang === "zh-TW" 
+                ? "當 AI 搜尋回答中提及這些競品名稱時，系統將自動計算競品市佔與引用差距。" 
+                : lang === "en" 
+                ? "When these competitor names appear in AI search responses, competitor citation share is calculated automatically." 
+                : "AI検索の回答文中にこれらの競合名が登場した際、競合シェアとして自動集計されます。"}
             </p>
           </div>
         </div>
@@ -316,7 +344,7 @@ export default function SettingsPage() {
             {saved && (
               <>
                 <Check className="w-4 h-4" />
-                プロジェクト設定をデータベースに保存しました！
+                {t.saved}
               </>
             )}
           </div>
@@ -327,7 +355,7 @@ export default function SettingsPage() {
             className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
           >
             {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            設定を保存する
+            {t.set_btn_save}
           </button>
         </div>
       </form>
