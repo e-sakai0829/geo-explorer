@@ -1,20 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-const PLAN_PRICES: Record<string, { name: string; amount: number }> = {
-  starter: { name: "GEO Explorer Starter プラン", amount: 9800 },
-  growth: { name: "GEO Explorer Growth プラン", amount: 29800 },
-  agency: { name: "GEO Explorer Agency プラン", amount: 79800 },
+const PLAN_PRICES: Record<string, { name: string; amount: number; credits: number }> = {
+  starter: { name: "GEO Explorer Starter プラン", amount: 9800, credits: 30 },
+  growth: { name: "GEO Explorer Growth プラン", amount: 29800, credits: 150 },
+  agency: { name: "GEO Explorer Agency プラン", amount: 79800, credits: 500 },
 };
 
 export async function POST(req: NextRequest) {
   try {
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
-      console.error("STRIPE_SECRET_KEY is missing in environment variables.");
-      return NextResponse.json({ 
-        error: "Vercelの環境変数に STRIPE_SECRET_KEY が設定されていません。Vercelダッシュボードの Settings > Environment Variables で設定を確認してください。" 
-      }, { status: 500 });
+      return NextResponse.json({ error: "STRIPE_SECRET_KEY が設定されていません。" }, { status: 500 });
+    }
+
+    // 1. ログインユーザーと組織を取得
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let orgId = "";
+    let userEmail = "";
+    let customerId: string | undefined = undefined;
+
+    if (user) {
+      userEmail = user.email || "";
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id, stripe_customer_id")
+        .eq("user_id", user.id)
+        .single();
+      
+      orgId = org?.id || "";
+      customerId = org?.stripe_customer_id || undefined;
     }
 
     const stripe = new Stripe(stripeKey, {
@@ -30,8 +48,8 @@ export async function POST(req: NextRequest) {
 
     const origin = req.headers.get("origin") || "https://geo.traditionalart.biz";
 
-    // Stripe サブスクリプション Checkout セッションの作成
-    const session = await stripe.checkout.sessions.create({
+    // 2. Stripe Checkout セッションを作成（orgId & userId をメタデータに完全注入）
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ["card"],
       line_items: [
         {
@@ -39,7 +57,7 @@ export async function POST(req: NextRequest) {
             currency: "jpy",
             product_data: {
               name: plan.name,
-              description: `${plan.name}（月額サブスクリプション）`,
+              description: `${plan.name}（月間 ${plan.credits} クレジット付与）`,
             },
             unit_amount: plan.amount,
             recurring: {
@@ -52,10 +70,21 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       success_url: `${origin}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/pricing?payment=cancelled`,
+      client_reference_id: orgId || user?.id || undefined,
       metadata: {
         planId,
+        orgId,
+        userId: user?.id || "",
       },
-    });
+    };
+
+    if (customerId) {
+      sessionParams.customer = customerId;
+    } else if (userEmail) {
+      sessionParams.customer_email = userEmail;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });
   } catch (error: any) {

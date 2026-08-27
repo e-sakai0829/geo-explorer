@@ -1,108 +1,183 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY;
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, targetBrand = "Ailo", competitorBrands = ["Speak", "プログリット", "DMM英会話", "ミエルカ"] } = await req.json();
+    // 1. 認証チェック
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!prompt) {
-      return NextResponse.json({ error: "プロンプトを指定してください。" }, { status: 400 });
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "ログインが必要です。ログイン後に再度お試しください。" }, 
+        { status: 401 }
+      );
     }
 
+    // 2. ユーザーの組織とクレジット残高を取得
+    const { data: org, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, plan, monthly_credits, used_credits")
+      .eq("user_id", user.id)
+      .single();
+
+    if (orgError || !org) {
+      return NextResponse.json(
+        { error: "組織情報が見つかりません。サポートへお問い合わせください。" }, 
+        { status: 404 }
+      );
+    }
+
+    // クレジット残高チェック（原価保護・粗利維持）
+    if (org.used_credits >= org.monthly_credits) {
+      return NextResponse.json(
+        { 
+          error: "今月の調査クレジット上限に達しました。プランをアップグレードして追加枠を取得してください。",
+          upgradeRequired: true,
+          currentCredits: org.monthly_credits,
+          usedCredits: org.used_credits
+        }, 
+        { status: 403 }
+      );
+    }
+
+    const { 
+      prompt, 
+      brandName = "Ailo", 
+      competitors = ["Speak", "プログリット", "DMM英会話", "ビズメイツ"],
+      targetLocale = "ja-JP"
+    } = await req.json();
+
+    if (!prompt) {
+      return NextResponse.json({ error: "調査対象のプロンプトを入力してください。" }, { status: 400 });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    
-    // Search Grounding 実行
+
+    // 3. Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
-      contents: prompt,
+      model: "gemini-2.5-flash",
+      contents: `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`,
       config: {
         tools: [{ googleSearch: {} }],
+        temperature: 0.2,
       },
     });
 
-    const rawText = response.text || "";
-    let fanoutQueries: string[] = [];
-    let citations: Array<{ title: string; url: string; domain: string }> = [];
-
     const candidate = response.candidates?.[0];
-    if (candidate?.groundingMetadata) {
-      const gm = candidate.groundingMetadata;
-      fanoutQueries = (gm.webSearchQueries as string[]) || [];
+    const text = candidate?.content?.parts?.[0]?.text || "";
 
-      if (gm.groundingChunks) {
-        citations = gm.groundingChunks.map((chunk: any) => {
-          const uri = chunk.web?.uri || "";
-          let domain = "";
-          try {
-            domain = new URL(uri).hostname;
-          } catch {
-            domain = uri;
-          }
-          return {
-            title: chunk.web?.title || domain,
-            url: uri,
-            domain: domain,
-          };
-        });
-      }
-    }
+    // 検索Groundingメタデータの抽出
+    const groundingMetadata = candidate?.groundingMetadata;
+    const searchChunks = groundingMetadata?.groundingChunks || [];
+    const webSources = searchChunks
+      .filter((chunk: any) => chunk.web?.uri)
+      .map((chunk: any) => ({
+        title: chunk.web.title || "引用元ページ",
+        url: chunk.web.uri,
+      }));
 
-    // ブランド言及の判定
-    const targetMentioned = rawText.toLowerCase().includes(targetBrand.toLowerCase());
-    const mentionedCompetitors = competitorBrands.filter((c: string) => 
-      c.trim() && rawText.toLowerCase().includes(c.toLowerCase())
+    // 検索クエリ（ファンアウト）の抽出
+    const searchQueries = groundingMetadata?.webSearchQueries || [
+      `${prompt} 費用`,
+      `${prompt} メリット`,
+      `${prompt} 比較`,
+    ];
+
+    // 自社および競合の言及判定
+    const brandMentioned = text.toLowerCase().includes(brandName.toLowerCase());
+    const brandCited = webSources.some((s: any) => 
+      s.title.toLowerCase().includes(brandName.toLowerCase()) || 
+      s.url.toLowerCase().includes(brandName.toLowerCase())
     );
 
-    // ギャップ判定
-    let gapStatus = "中立";
-    if (targetMentioned) {
-      gapStatus = "自社言及あり（優良）";
-    } else if (mentionedCompetitors.length > 0) {
-      gapStatus = "要対策（競合のみ言及）";
+    const competitorMentions: Record<string, boolean> = {};
+    competitors.forEach((comp: string) => {
+      competitorMentions[comp] = text.toLowerCase().includes(comp.toLowerCase());
+    });
+
+    // 4. 実クレジット消費の記録（used_credits + 1）
+    await supabase
+      .from("organizations")
+      .update({ 
+        used_credits: org.used_credits + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", org.id);
+
+    // 5. ユーザーのプロジェクト取得または作成
+    let projectId = "";
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("organization_id", org.id)
+      .limit(1)
+      .single();
+
+    if (project) {
+      projectId = project.id;
+    } else {
+      const { data: newProj } = await supabase
+        .from("projects")
+        .insert({
+          organization_id: org.id,
+          name: brandName,
+          domain: "https://example.com",
+          competitors: competitors,
+        })
+        .select("id")
+        .single();
+      projectId = newProj?.id || "";
     }
 
-    // 奪取難易度 (LLM-Difficulty: 1〜100) の簡易算定
-    // 公式ドメインや大手（.go.jp, wikipedia, 大手ポータル）が多いほど難易度が高く、ブログや一般サイトが多いほど低く算定
-    let difficultyScore = 45;
-    const hasGov = citations.some(c => c.domain.includes(".go.jp") || c.domain.includes(".ac.jp"));
-    const hasWiki = citations.some(c => c.domain.includes("wikipedia.org"));
-    if (hasGov) difficultyScore += 30;
-    if (hasWiki) difficultyScore += 15;
-    if (citations.length < 5) difficultyScore -= 15;
-    difficultyScore = Math.max(15, Math.min(95, difficultyScore));
+    // 6. 追跡プロンプトおよび解析ログを実DBに保存
+    if (projectId) {
+      const { data: tp } = await supabase
+        .from("tracked_prompts")
+        .insert({
+          project_id: projectId,
+          prompt_text: prompt,
+          target_locale: targetLocale,
+          last_scanned_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
 
-    // トピック抽出
-    const topics: string[] = [];
-    const lines = rawText.split("\n");
-    for (const line of lines) {
-      const clean = line.trim();
-      if (clean.startsWith("###") || clean.startsWith("##") || clean.startsWith("【") || clean.match(/^[1-5]\./)) {
-        topics.push(clean.replace(/[#*【】]/g, "").trim());
+      if (tp?.id) {
+        await supabase
+          .from("prompt_analysis_logs")
+          .insert({
+            prompt_id: tp.id,
+            ai_overview_present: true,
+            brand_mentioned: brandMentioned,
+            brand_cited: brandCited,
+            raw_response: text,
+            fanout_queries: searchQueries,
+            citation_sources: webSources,
+            competitor_mentions: competitorMentions,
+          });
       }
     }
 
     return NextResponse.json({
       prompt,
-      rawText,
-      fanoutQueries,
-      citations,
-      targetBrand,
-      targetMentioned,
-      mentionedCompetitors,
-      gapStatus,
-      difficultyScore,
-      topics: topics.slice(0, 6),
-      analyzedAt: new Date().toISOString(),
+      brandName,
+      brandMentioned,
+      brandCited,
+      aiResponse: text,
+      fanoutQueries: searchQueries,
+      citationSources: webSources,
+      competitorMentions,
+      creditsRemaining: org.monthly_credits - (org.used_credits + 1),
     });
-
   } catch (error: any) {
-    console.error("Analysis error:", error);
-    return NextResponse.json({ error: error.message || "分析処理中にエラーが発生しました。" }, { status: 500 });
+    console.error("Analysis API Error:", error);
+    return NextResponse.json({ error: error.message || "解析中にエラーが発生しました。" }, { status: 500 });
   }
 }

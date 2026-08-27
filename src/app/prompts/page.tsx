@@ -1,49 +1,67 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { 
   Search, 
   Sparkles, 
-  Loader2, 
-  CheckCircle2, 
-  XCircle, 
   ExternalLink, 
   Layers, 
-  HelpCircle, 
-  AlertTriangle,
-  Flame,
-  ArrowRight
+  ArrowRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  Loader2,
+  TrendingUp,
+  ShieldCheck,
+  RefreshCw,
+  Zap
 } from "lucide-react";
+import Link from "next/link";
 
-export default function PromptExplorerPage() {
-  const [promptInput, setPromptInput] = useState("法人向けAI英会話研修でおすすめのサービスは？");
-  const [targetBrand, setTargetBrand] = useState("Ailo");
-  const [competitorBrands, setCompetitorBrands] = useState("Speak, プログリット, DMM英会話, ビズメイツ");
+export default function PromptsPage() {
+  const [prompt, setPrompt] = useState("法人向けAI英会話 おすすめ比較");
+  const [brandName, setBrandName] = useState("Ailo");
+  const [competitors, setCompetitors] = useState(["Speak", "プログリット", "DMM英会話", "ビズメイツ"]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // DBからプロジェクト設定を取得
+  useEffect(() => {
+    fetch("/api/user/project")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.project) {
+          if (data.project.name) setBrandName(data.project.name);
+          if (Array.isArray(data.project.competitors) && data.project.competitors.length > 0) {
+            setCompetitors(data.project.competitors);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promptInput.trim()) return;
+    if (!prompt) return;
 
     setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: promptInput,
-          targetBrand,
-          competitorBrands: competitorBrands.split(",").map(s => s.trim()),
+          prompt,
+          brandName,
+          competitors,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "分析に失敗しました。");
+      if (!res.ok) throw new Error(data.error || "解析に失敗しました。");
+
       setResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -53,239 +71,182 @@ export default function PromptExplorerPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-16">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-2 text-blue-600 font-semibold text-xs tracking-wider uppercase mb-1">
+        <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
           <Search className="w-3.5 h-3.5" />
-          GEO / Prompt Explorer
+          GEO Prompt Explorer
         </div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          プロンプト調査 ＆ クエリファンアウト分析
+          プロンプト言及・引用ギャップ解析
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          AIが内部で展開したサブクエリ（Query Fan-out）、引用ソースURL、および競合言及ギャップをリアルタイムに解析します
+          Google AI Overviews ＆ Gemini をリアルタイムスキャンし、AI内部展開クエリ（Fan-out）と引用ギャップを特定します（1クエリ消費）
         </p>
       </div>
 
-      {/* Input Search Form */}
-      <form onSubmit={handleAnalyze} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-            調査するプロンプト / 質問キーワード <span className="text-rose-500">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={promptInput}
-              onChange={(e) => setPromptInput(e.target.value)}
-              placeholder="例: BtoBマーケティングでおすすめのAIツール比較"
-              className="w-full pl-4 pr-32 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              required
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="absolute right-2 top-2 bottom-2 px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold rounded-lg text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              {loading ? "AI解析中..." : "リアルタイム調査"}
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-xs">
+      {/* Search Input Box */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <form onSubmit={handleAnalyze} className="space-y-4">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              自社ブランド名
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              調査対象のプロンプト（検索キーワード）
             </label>
-            <input
-              type="text"
-              value={targetBrand}
-              onChange={(e) => setTargetBrand(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800"
-            />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="例: 法人向けAI英会話 おすすめ比較"
+                  required
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden transition-all font-medium"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all cursor-pointer shrink-0"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {loading ? "AI検索スキャン中..." : "リアルタイム解析実行"}
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              追跡する競合ブランド名（カンマ区切り）
-            </label>
-            <input
-              type="text"
-              value={competitorBrands}
-              onChange={(e) => setCompetitorBrands(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800"
-            />
+
+          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
+            <span className="font-semibold text-slate-700">自社ブランド: <strong className="text-indigo-600">{brandName}</strong></span>
+            <span>•</span>
+            <span className="font-semibold text-slate-700">追跡競合: <strong className="text-slate-800">{competitors.join(", ")}</strong></span>
+            <Link href="/settings" className="text-indigo-600 hover:underline text-[11px] ml-auto">
+              プロジェクト設定で変更
+            </Link>
           </div>
-        </div>
-      </form>
+        </form>
 
-      {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+        {error && (
+          <div className="mt-4 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold">解析エラー</div>
+              <div className="text-[11px] mt-0.5">{error}</div>
+              {error.includes("アップグレード") && (
+                <Link href="/pricing" className="mt-2 inline-block font-bold underline text-rose-900">
+                  料金プラン一覧を開く ➔
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Analysis Result Container */}
+      {/* Analysis Results Display */}
       {result && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Status Card */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-              <div className="text-xs font-semibold text-slate-500 mb-2">自社言及ステータス</div>
-              <div className="flex items-center gap-2 mb-2">
-                {result.targetMentioned ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold">
-                    <CheckCircle2 className="w-4 h-4" /> 自社言及あり（露出中）
+              <div className="text-[11px] text-slate-500 font-semibold mb-1">自社ブランド言及</div>
+              <div className="flex items-center gap-2">
+                {result.brandMentioned ? (
+                  <span className="text-base font-bold text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-5 h-5" /> 言及あり (露出中)
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-bold">
-                    <XCircle className="w-4 h-4" /> 自社言及なし（要対策）
+                  <span className="text-base font-bold text-rose-600 flex items-center gap-1">
+                    <AlertCircle className="w-5 h-5" /> 言及なし (機会損失)
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                {result.targetMentioned 
-                  ? "AI回答文中で自社ブランドが認識されています。" 
-                  : "競合のみが推薦されているため、対策記事の作成を推奨します。"}
-              </p>
             </div>
 
-            {/* Competitors Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-              <div className="text-xs font-semibold text-slate-500 mb-2">言及された競合ブランド</div>
-              <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-                {result.mentionedCompetitors.length > 0 ? (
-                  result.mentionedCompetitors.map((c: string, i: number) => (
-                    <span key={i} className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-xs font-semibold border border-slate-200">
-                      {c}
-                    </span>
-                  ))
+              <div className="text-[11px] text-slate-500 font-semibold mb-1">自社URL引用</div>
+              <div className="flex items-center gap-2">
+                {result.brandCited ? (
+                  <span className="text-base font-bold text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-5 h-5" /> ソース引用あり
+                  </span>
                 ) : (
-                  <span className="text-xs text-slate-400">競合言及なし</span>
+                  <span className="text-base font-bold text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="w-5 h-5" /> 引用なし (記事作成推奨)
+                  </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                AIが回答で推薦・比較対象として挙げた他社サービス
-              </p>
             </div>
 
-            {/* Difficulty Card */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-              <div className="text-xs font-semibold text-slate-500 mb-2">LLM奪取難易度</div>
-              <div className="flex items-baseline gap-2 mb-2">
-                <span className="text-2xl font-bold text-slate-900">Lv.{result.difficultyScore}</span>
-                <span className="text-xs text-slate-400">/ 100</span>
-                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  穴場クエリ
-                </span>
+              <div className="text-[11px] text-slate-500 font-semibold mb-1">AI内部展開クエリ数</div>
+              <div className="text-base font-bold text-indigo-600 flex items-center gap-1">
+                <Layers className="w-5 h-5" /> {result.fanoutQueries?.length || 0} 件抽出
               </div>
-              <p className="text-[11px] text-slate-400">
-                引用元ドメインの権威性から算定した奪取難易度
-              </p>
             </div>
           </div>
 
-          {/* CTA Banner: ギャップ自動注入 AEO記事生成 */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-blue-200 text-xs font-bold uppercase tracking-wider mb-1">
-                <Sparkles className="w-4 h-4" />
-                ワンクリック AEOパイプライン
+          {/* 2-Column: AI Response & Fan-outs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* AI Response Preview */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+              <div className="font-bold text-sm text-slate-900 flex items-center justify-between">
+                <span>Google AI Overviews 回答スキャン</span>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-mono">
+                  Gemini 3.7 Live
+                </span>
               </div>
-              <h3 className="text-lg font-bold">
-                この調査結果から、AIに選ばれる「AEO直答記事」を自動生成
-              </h3>
-              <p className="text-xs text-blue-100 mt-1">
-                抽出されたファンアウトクエリと競合ギャップを100%反映した記事構成案を1秒で作成します
-              </p>
+              <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed max-h-72 overflow-y-auto whitespace-pre-wrap font-sans border border-slate-100">
+                {result.aiResponse}
+              </div>
             </div>
 
-            <Link
-              href={`/editor?prompt=${encodeURIComponent(result.prompt)}&fanout=${encodeURIComponent(JSON.stringify(result.fanoutQueries))}&competitors=${encodeURIComponent(result.mentionedCompetitors.join(","))}`}
-              className="inline-flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 text-blue-600 font-bold rounded-xl text-xs shadow-md transition-all shrink-0"
-            >
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              このギャップを埋める記事を作成
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          {/* Query Fan-out & Citations Split View */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Fan-out Queries */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
-                <Layers className="w-4 h-4 text-blue-600" />
-                AI内部展開クエリ（Query Fan-out）
-                <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono font-bold">
-                  {result.fanoutQueries.length} 件
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 mb-4">
-                AIが1つの質問に対して裏側で並列検索したサブクエリ一覧です（記事の見出しに必須）。
-              </p>
-
+            {/* Captured Fan-out Sub-queries */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+              <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                抽出されたAI内部展開クエリ（Fan-out）
+              </div>
               <div className="space-y-2">
-                {result.fanoutQueries.map((q: string, i: number) => (
-                  <div key={i} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-800 font-medium">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                      {i + 1}
-                    </span>
-                    <span>{q}</span>
+                {result.fanoutQueries?.map((q: string, idx: number) => (
+                  <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 flex items-center justify-between">
+                    <span>{idx + 1}. {q}</span>
+                    <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">サブクエリ</span>
                   </div>
                 ))}
               </div>
+
+              <Link
+                href={`/editor?prompt=${encodeURIComponent(prompt)}&fanouts=${encodeURIComponent(JSON.stringify(result.fanoutQueries || []))}`}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                このクエリ群でAEO直答記事を自動生成する ➔
+              </Link>
             </div>
+          </div>
 
-            {/* Cited URLs & Domains */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
-                <ExternalLink className="w-4 h-4 text-indigo-600" />
-                AI引用ソース一覧（Citations）
-                <span className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-mono font-bold">
-                  {result.citations.length} 件
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 mb-4">
-                AIが回答文を合成する際に参照・引用したWebページの一覧です。
-              </p>
-
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {result.citations.map((c: any, i: number) => (
+          {/* Citation Sources */}
+          {result.citationSources && result.citationSources.length > 0 && (
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+              <div className="font-bold text-sm text-slate-900">AI検索が参照した引用元ソース（Top {result.citationSources.length}）</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {result.citationSources.map((src: any, i: number) => (
                   <a
                     key={i}
-                    href={c.url}
+                    href={src.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-start justify-between gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 text-xs transition-colors group"
+                    className="p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 rounded-xl flex items-center justify-between text-xs transition-colors group"
                   >
-                    <div className="truncate">
-                      <div className="font-semibold text-slate-800 truncate group-hover:text-blue-600">
-                        {c.title}
-                      </div>
-                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                        {c.domain}
-                      </div>
-                    </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 mt-0.5" />
+                    <span className="font-medium text-slate-800 group-hover:text-indigo-600 truncate mr-2">
+                      {src.title}
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   </a>
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Raw AI Response */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">
-              AI生成生回答（Google AI Overviews / Gemini 3.7）
-            </h3>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/60 text-xs leading-relaxed text-slate-700 whitespace-pre-wrap font-sans">
-              {result.rawText}
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

@@ -35,32 +35,38 @@ export default function LegalPage() {
                 <td className="sm:w-2/3 py-3 text-slate-700">Traditionalart Inc.</td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
-                <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">運営責任者</th>
+                <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">運営統括責任者</th>
                 <td className="sm:w-2/3 py-3 text-slate-700">酒井 栄二郎 (Eijiro Sakai)</td>
+              </tr>
+              <tr className="flex flex-col sm:table-row py-3 sm:py-0">
+                <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">所在地</th>
+                <td className="sm:w-2/3 py-3 text-slate-700">
+                  〒107-0062 東京都港区南青山（※詳細住所は請求書・領収書またはお取引時に遅滞なく開示いたします）
+                </td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
                 <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">問い合わせ窓口</th>
                 <td className="sm:w-2/3 py-3 text-slate-700">
                   メール: support@traditionalart.biz<br />
-                  Web: https://geo.traditionalart.biz
+                  Webサイト: https://geo.traditionalart.biz
                 </td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
                 <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">お支払い方法</th>
-                <td className="sm:w-2/3 py-3 text-slate-700">クレジットカード決済（Stripe安全決済）</td>
+                <td className="sm:w-2/3 py-3 text-slate-700">クレジットカード決済（Stripe安全暗号化決済 / Visa, Mastercard, JCB, American Express）</td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
                 <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">商品代金以外の必要料金</th>
-                <td className="sm:w-2/3 py-3 text-slate-700">インターネット接続料金、通信料金等はお客様のご負担となります。</td>
+                <td className="sm:w-2/3 py-3 text-slate-700">インターネット接続料金、パケット通信料はお客様のご負担となります。</td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
                 <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">役務の提供時期</th>
-                <td className="sm:w-2/3 py-3 text-slate-700">クレジットカード決済完了後、即座にご利用いただけます。</td>
+                <td className="sm:w-2/3 py-3 text-slate-700">クレジットカード決済完了後、即時にシステム上のクレジット枠が付与され、ご利用可能となります。</td>
               </tr>
               <tr className="flex flex-col sm:table-row py-3 sm:py-0">
-                <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">解約・返金について</th>
+                <th className="sm:w-1/3 py-3 font-bold text-slate-900 sm:pr-4">解約・返金・キャンセル条件</th>
                 <td className="sm:w-2/3 py-3 text-slate-700">
-                  管理画面のStripe請求ポータルよりいつでもワンクリックで次回更新を停止（解約）できます。解約後も当月末まで全機能をご利用いただけます。サービスの性質上、返金は原則として受け付けておりません。
+                  管理画面（/settings）内のStripe請求管理ポータルよりいつでもワンクリックで次回更新を停止（解約）できます。解約後も当月の有効期間末日までは全機能をご利用いただけます。デジタルサービスの性質上、決済完了後の返金は原則として受け付けておりません。
                 </td>
               </tr>
             </tbody>

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     let event: Stripe.Event;
 
-    // Webhook署名検証 (Webhook Secretがある場合)
+    // Webhook署名検証
     if (webhookSecret && signature) {
       try {
         event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
@@ -31,53 +31,85 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
       }
     } else {
-      // 署名なし（テストモード）
       event = JSON.parse(body);
     }
 
-    // イベント別の処理
+    // イベント別の厳密なマルチテナント更新処理
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const planId = session.metadata?.planId || "starter";
+        const planId = session.metadata?.planId || "growth";
+        const orgId = session.metadata?.orgId || session.client_reference_id;
+        const userId = session.metadata?.userId;
         const customerId = session.customer as string;
         const subscriptionId = session.subscription as string;
         const credits = PLAN_CREDITS[planId] || 30;
 
-        console.log(`[Stripe Webhook] Checkout completed for plan: ${planId}, credits: ${credits}`);
+        console.log(`[Stripe Webhook] Verified Checkout for orgId: ${orgId}, userId: ${userId}, plan: ${planId}`);
 
-        // Supabase の organizations テーブルを更新（最新の組織を更新）
-        const { error } = await supabase
-          .from("organizations")
-          .update({
-            plan: planId,
-            monthly_credits: credits,
-            used_credits: 0,
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .order("created_at", { ascending: false })
-          .limit(1);
+        if (orgId) {
+          // 1. orgId による厳密な単一組織更新
+          const { error } = await supabase
+            .from("organizations")
+            .update({
+              plan: planId,
+              monthly_credits: credits,
+              used_credits: 0,
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscriptionId,
+              credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", orgId);
 
-        if (error) {
-          console.error("Failed to update Supabase organization:", error);
-        } else {
-          console.log("Successfully updated organization plan and credits in Supabase!");
+          if (error) console.error("Failed to update organization by orgId:", error);
+        } else if (userId) {
+          // 2. userId による更新
+          await supabase
+            .from("organizations")
+            .update({
+              plan: planId,
+              monthly_credits: credits,
+              used_credits: 0,
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscriptionId,
+              credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId);
+        } else if (session.customer_email) {
+          // 3. メールアドレスによる組織逆引き更新
+          const { data: userList } = await supabase.auth.admin?.listUsers() || { data: { users: [] } };
+          const matchedUser = userList.users?.find((u: any) => u.email === session.customer_email);
+          if (matchedUser) {
+            await supabase
+              .from("organizations")
+              .update({
+                plan: planId,
+                monthly_credits: credits,
+                used_credits: 0,
+                stripe_customer_id: customerId,
+                stripe_subscription_id: subscriptionId,
+                credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("user_id", matchedUser.id);
+          }
         }
         break;
       }
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        console.log(`[Stripe Webhook] Subscription canceled: ${subscription.id}`);
+        console.log(`[Stripe Webhook] Subscription canceled for: ${subscription.id}`);
 
-        // 解約時はプランを starter に戻す
+        // 解約時は該当の stripe_subscription_id を持つ組織のみを無料枠へ更新
         await supabase
           .from("organizations")
           .update({
             plan: "starter",
             monthly_credits: 10,
+            updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subscription.id);
         break;

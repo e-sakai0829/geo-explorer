@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,29 +9,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "STRIPE_SECRET_KEY が設定されていません。" }, { status: 500 });
     }
 
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2023-10-16" as any,
-    });
+    // 1. ログインユーザーを取得
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    // 最新の組織から stripe_customer_id を取得
+    if (authError || !user) {
+      return NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
+    }
+
+    // 2. ログインユーザー自身の組織から stripe_customer_id を取得
     const { data: org } = await supabase
       .from("organizations")
       .select("stripe_customer_id")
-      .not("stripe_customer_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .eq("user_id", user.id)
       .single();
 
     const origin = req.headers.get("origin") || "https://geo.traditionalart.biz";
 
     if (!org?.stripe_customer_id) {
-      // まだStripe顧客IDがない場合は料金ページへリダイレクト案内
+      // まだStripe顧客IDがない場合（無料枠ユーザー）は料金ページへ誘導
       return NextResponse.json({ 
         url: `${origin}/pricing` 
       });
     }
 
-    // Stripe Customer Portal (請求管理・解約・領収書発行ポータル) セッションの作成
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16" as any,
+    });
+
+    // 3. ログインユーザー専用の Stripe Customer Portal を発行
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: org.stripe_customer_id,
       return_url: `${origin}/settings`,

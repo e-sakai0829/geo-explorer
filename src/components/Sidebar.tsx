@@ -24,6 +24,13 @@ export default function Sidebar() {
   const supabase = createClient();
   const { lang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string>("マイプロジェクト");
+  const [planName, setPlanName] = useState<string>("Starter");
+  const [credits, setCredits] = useState<{ total: number; used: number; remaining: number }>({
+    total: 10,
+    used: 0,
+    remaining: 10,
+  });
 
   const navigation = [
     { 
@@ -69,6 +76,31 @@ export default function Sidebar() {
         setUserEmail(data.user.email);
       }
     });
+
+    // DB実クレジットの取得
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setPlanName(data.plan.charAt(0).toUpperCase() + data.plan.slice(1));
+          setCredits({
+            total: data.monthly_credits || 10,
+            used: data.used_credits || 0,
+            remaining: data.remaining_credits || 10,
+          });
+        }
+      })
+      .catch(() => {});
+
+    // DBプロジェクト設定の取得
+    fetch("/api/user/project")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.project?.name) {
+          setProjectName(data.project.name);
+        }
+      })
+      .catch(() => {});
   }, [supabase]);
 
   const handleSignOut = async () => {
@@ -76,6 +108,8 @@ export default function Sidebar() {
     router.push("/");
     router.refresh();
   };
+
+  const percentage = Math.min(100, Math.round((credits.remaining / (credits.total || 1)) * 100));
 
   return (
     <aside className="w-64 bg-white text-slate-700 flex flex-col h-screen fixed left-0 top-0 border-r border-slate-200/80 z-50 shadow-xs font-sans">
@@ -97,13 +131,13 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      {/* Project Selector Badge */}
+      {/* Project Selector Badge (DB実データ連携) */}
       <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
         <div className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase mb-1">
           {lang === "zh-TW" ? "當前選定專案" : lang === "en" ? "Selected Project" : "選択中のプロジェクト"}
         </div>
         <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-md border border-slate-200 shadow-2xs">
-          <span className="text-xs font-semibold text-slate-800 truncate">Ailo（AI英会話）</span>
+          <span className="text-xs font-semibold text-slate-800 truncate">{projectName}</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
         </div>
       </div>
@@ -132,20 +166,22 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Credit & User Footer */}
+      {/* Credit & User Footer (DB実データ連携) */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/60">
         <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs mb-3">
           <div className="flex justify-between items-center text-[11px] mb-1.5">
             <span className="text-slate-500 font-medium">
-              {lang === "zh-TW" ? "月度額度" : lang === "en" ? "Monthly Credits" : "月間クレジット"}
+              {lang === "zh-TW" ? "剩餘額度" : lang === "en" ? "Credits" : "残りクレジット"}
             </span>
-            <span className="text-slate-900 font-bold">24 / 30 pt</span>
+            <span className="text-slate-900 font-bold">
+              {credits.remaining} / {credits.total} pt
+            </span>
           </div>
           <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-indigo-600 h-full rounded-full" style={{ width: "80%" }}></div>
+            <div className="bg-indigo-600 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
           </div>
           <div className="text-[10px] text-slate-400 mt-2 flex items-center justify-between">
-            <span>Starter</span>
+            <span>{planName} プラン</span>
             <Link href="/pricing" className="text-indigo-600 font-bold hover:underline">
               {lang === "zh-TW" ? "升級方案" : lang === "en" ? "Upgrade" : "アップグレード"}
             </Link>
@@ -158,7 +194,7 @@ export default function Sidebar() {
               <User className="w-3.5 h-3.5" />
             </div>
             <span className="truncate text-slate-700 font-medium text-[11px]">
-              {userEmail || "酒井 栄二郎"}
+              {userEmail || "ログイン中"}
             </span>
           </Link>
           

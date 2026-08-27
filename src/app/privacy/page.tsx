@@ -24,7 +24,7 @@ export default function PrivacyPolicyPage() {
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold mb-2">
               <ShieldCheck className="w-3.5 h-3.5" />
-              GDPR & CCPA Compliant
+              GDPR, CCPA & PDPA Compliant
             </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
               {lang === "ja" && "プライバシーポリシー"}
@@ -97,21 +97,26 @@ export default function PrivacyPolicyPage() {
             <>
               <section className="space-y-3">
                 <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">1. 隱私權保護基本方針</h2>
-                <p>Traditionalart Inc.（以下簡稱「本公司」）深知個人資料之重要性，在營運「GEO Explorer」平台時，嚴格遵守個人資料保護相關法律、歐盟一般資料保護規則（GDPR）及加州消費者隱私法（CCPA）。</p>
+                <p>Traditionalart Inc.（以下簡稱「本公司」）深知個人資料之重要性，在營運「GEO Explorer」平台時，嚴格遵守個人資料保護法（台灣個資法 / 香港個人資料私隱條例 PDPA）、歐盟一般資料保護規則（GDPR）及加州消費者隱私法（CCPA）。</p>
               </section>
 
               <section className="space-y-3">
                 <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">2. 蒐集之資料項目與使用目的</h2>
                 <ul className="list-disc pl-5 space-y-1.5">
-                  <li><strong>帳戶資料</strong>: 電子郵件地址、姓名（用於帳戶驗證與系統通知）</li>
+                  <li><strong>帳戶資料</strong>: 電子郵件地址、姓名、系統驗證憑證（用於使用者驗證與系統通知）</li>
                   <li><strong>付款資料</strong>: 所有信用卡付款均由通過 PCI-DSS 最高安全認證之 Stripe 處理，本公司伺服器不會儲存您的信用卡完整資訊。</li>
                   <li><strong>網站流量分析（Google Analytics 4）</strong>: 透過 Cookie 蒐集去識別化之使用數據，用於改善產品體驗。</li>
                 </ul>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">3. GDPR 與使用者權利</h2>
+                <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">3. GDPR、PDPA 與使用者法定權利</h2>
                 <p>使用者享有查閱、更正、刪除（被遺忘權）及攜帶其個人資料之法定權利。如有任何要求，可隨時聯繫我們的資料保護窗口：support@traditionalart.biz。</p>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">4. Cookie 之使用與管理</h2>
+                <p>本平台使用 Cookie 以維持登入狀態並透過 GA4 進行匿名流量統計。使用者可透過畫面底部之 Cookie 同意橫幅或瀏覽器設定隨時選擇拒絕或變更 Cookie 偏好。</p>
               </section>
             </>
           )}
@@ -135,6 +140,11 @@ export default function PrivacyPolicyPage() {
               <section className="space-y-3">
                 <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">3. Your GDPR and CCPA Rights</h2>
                 <p>Under GDPR and CCPA, you have the right to access, rectify, port, or request erasure of your personal data ("Right to be Forgotten"). To exercise these rights, please contact support@traditionalart.biz.</p>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">4. Cookie Policy</h2>
+                <p>We use cookies to maintain active login sessions and collect anonymized usage analytics via GA4. You can manage or decline cookie usage at any time via the cookie consent banner or your browser settings.</p>
               </section>
             </>
           )}

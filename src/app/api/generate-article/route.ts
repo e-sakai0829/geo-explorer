@@ -1,14 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. 認証チェック
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "ログインが必要です。ログイン後に再度お試しください。" }, 
+        { status: 401 }
+      );
+    }
+
+    // 2. 組織情報の取得
+    const { data: org, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, plan, monthly_credits, used_credits")
+      .eq("user_id", user.id)
+      .single();
+
+    if (orgError || !org) {
+      return NextResponse.json(
+        { error: "組織情報が見つかりません。" }, 
+        { status: 404 }
+      );
+    }
+
     const { 
       prompt, 
       brandName = "Ailo", 
       fanoutQueries = [], 
       targetLanguage = "ja" 
     } = await req.json();
+
+    if (!prompt) {
+      return NextResponse.json({ error: "記事テーマ（プロンプト）を指定してください。" }, { status: 400 });
+    }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -17,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 言語別のプロンプト生成指示
+    // 言語別のプロンプト指示
     let languageInstruction = "";
     if (targetLanguage === "zh-TW") {
       languageInstruction = `
@@ -57,9 +87,10 @@ Your mission is to generate high-authority structured content designed to be cit
 
 ${languageInstruction}
 
-Format the output in clean, valid Markdown.
+Format the output in clean, valid Markdown with an engaging H1 title.
 `;
 
+    // 3. AIによる記事生成
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
@@ -71,10 +102,38 @@ Format the output in clean, valid Markdown.
 
     const markdown = response.text || "";
 
+    // 4. プロジェクトの取得または作成
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("organization_id", org.id)
+      .limit(1)
+      .single();
+
+    // 5. 生成記事を実DB（aeo_articles）に保存
+    if (project?.id) {
+      const firstLine = markdown.split("\n")[0] || "";
+      const title = firstLine.replace(/^#\s*/, "") || `${prompt} のAEO直答ガイド`;
+
+      await supabase
+        .from("aeo_articles")
+        .insert({
+          project_id: project.id,
+          target_prompt: prompt,
+          language: targetLanguage,
+          title: title,
+          content_markdown: markdown,
+          fanout_queries_covered: fanoutQueries,
+          aeo_score: 95,
+          status: "draft",
+        });
+    }
+
     return NextResponse.json({
       article: markdown,
       language: targetLanguage,
       wordCount: markdown.length,
+      savedToDb: true,
     });
   } catch (error: any) {
     console.error("Generate Article API Error:", error);

@@ -14,23 +14,25 @@ import {
   Mail, 
   ExternalLink, 
   Check, 
-  Sparkles,
-  ArrowRight,
-  Globe,
-  AlertTriangle,
-  FileText,
-  Loader2
+  Sparkles, 
+  ArrowRight, 
+  Globe, 
+  AlertTriangle, 
+  FileText, 
+  Loader2 
 } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [userEmail, setUserEmail] = useState<string>("sakai@traditionalart.biz");
+  const [userEmail, setUserEmail] = useState<string>("");
   const [targetBrand, setTargetBrand] = useState("Ailo");
   const [targetDomain, setTargetDomain] = useState("https://ailo.jp");
   const [competitors, setCompetitors] = useState("Speak, プログリット, DMM英会話, ビズメイツ");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10, resetAt: "2026-09-27" });
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -38,6 +40,38 @@ export default function SettingsPage() {
         setUserEmail(data.user.email);
       }
     });
+
+    // DBからプロジェクト設定を取得
+    fetch("/api/user/project")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.project) {
+          setTargetBrand(data.project.name || "Ailo");
+          setTargetDomain(data.project.domain || "https://ailo.jp");
+          setCompetitors(
+            Array.isArray(data.project.competitors)
+              ? data.project.competitors.join(", ")
+              : "Speak, プログリット, DMM英会話, ビズメイツ"
+          );
+        }
+      })
+      .catch(() => {});
+
+    // DBからクレジット残高を取得
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setCredits({
+            plan: data.plan.charAt(0).toUpperCase() + data.plan.slice(1),
+            total: data.monthly_credits,
+            used: data.used_credits,
+            remaining: data.remaining_credits,
+            resetAt: data.credits_reset_at ? new Date(data.credits_reset_at).toLocaleDateString("ja-JP") : "2026-09-27",
+          });
+        }
+      })
+      .catch(() => {});
   }, [supabase]);
 
   const handleSignOut = async () => {
@@ -65,10 +99,28 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveProject = (e: React.FormEvent) => {
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/user/project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: targetBrand,
+          domain: targetDomain,
+          competitors: competitors.split(",").map((s) => s.trim()).filter(Boolean),
+        }),
+      });
+
+      if (!res.ok) throw new Error("設定の保存に失敗しました。");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      alert("エラー: " + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -83,7 +135,7 @@ export default function SettingsPage() {
           アカウント設定 ＆ サブスクリプション管理
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          アカウント情報、契約中のプラン、クレジットカード変更、領収書発行、解約手続き
+          アカウント情報、契約中のプラン、クレジットカード変更、領収書発行、プロジェクト設定（DB保存）
         </p>
       </div>
 
@@ -96,7 +148,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900">ログインアカウント</h2>
-              <p className="text-xs text-slate-500">{userEmail}</p>
+              <p className="text-xs text-slate-500">{userEmail || "未設定"}</p>
             </div>
           </div>
 
@@ -158,20 +210,20 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <div className="text-[11px] text-slate-500 mb-1">現在のプラン</div>
-            <div className="text-base font-bold text-slate-900">Starter プラン</div>
-            <div className="text-xs text-indigo-600 font-semibold mt-0.5">¥9,800 / 月</div>
+            <div className="text-base font-bold text-slate-900">{credits.plan} プラン</div>
+            <div className="text-xs text-indigo-600 font-semibold mt-0.5">Stripe 自動更新</div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <div className="text-[11px] text-slate-500 mb-1">今月の残りクレジット</div>
-            <div className="text-base font-bold text-slate-900">24 / 30 クエリ</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">次回リセット: 2026-09-27</div>
+            <div className="text-base font-bold text-slate-900">{credits.remaining} / {credits.total} pt</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">次回リセット: {credits.resetAt}</div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="text-[11px] text-slate-500 mb-1">記事生成残り枠</div>
-            <div className="text-base font-bold text-emerald-600">4 / 5 本</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">35-65文字直答生成</div>
+            <div className="text-[11px] text-slate-500 mb-1">消費済みクレジット</div>
+            <div className="text-base font-bold text-emerald-600">{credits.used} pt</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">実API解析消費</div>
           </div>
         </div>
 
@@ -183,7 +235,7 @@ export default function SettingsPage() {
               請求・カード変更・解約手続き
             </div>
             <p className="text-[11px] text-slate-500">
-              クレジットカードの変更、領収書（インボイスPDF）の発行、サブスクリプションの自動更新停止（解約）
+              クレジットカードの変更、領収書（インボイスPDF）の発行、サブスクリプションの解約
             </p>
           </div>
 
@@ -200,22 +252,14 @@ export default function SettingsPage() {
             Stripe 請求・解約ポータル
           </button>
         </div>
-
-        {/* Cancellation Notice Banner */}
-        <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <strong>解約に関するポリシー:</strong> 解約ボタンを押した場合でも、既に支払われた当月の請求期間末日（次回更新日）までは引き続きすべての機能をご利用いただけます。違約金等は一切発生いたしません。
-          </div>
-        </div>
       </div>
 
-      {/* 3. Project Configuration */}
+      {/* 3. Project Configuration (DB実保存) */}
       <form onSubmit={handleSaveProject} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-sm font-bold text-slate-900">追跡プロジェクト設定</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            AI検索で自社として判定するブランド名と、追跡対象の競合リストを設定します
+            AI検索で自社として判定するブランド名と、追跡対象の競合リストを設定します（DB保存）
           </p>
         </div>
 
@@ -269,15 +313,17 @@ export default function SettingsPage() {
             {saved && (
               <>
                 <Check className="w-4 h-4" />
-                プロジェクト設定を保存しました
+                プロジェクト設定をデータベースに保存しました！
               </>
             )}
           </div>
 
           <button
             type="submit"
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+            disabled={saving}
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
           >
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             設定を保存する
           </button>
         </div>
