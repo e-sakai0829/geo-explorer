@@ -6,7 +6,7 @@
 create table if not exists public.organizations (
     id uuid primary key default gen_random_uuid(),
     user_id uuid references auth.users(id) on delete cascade not null,
-    name text not null default 'My Organization',
+    name text not null default 'マイ組織',
     plan text not null default 'starter' check (plan in ('starter', 'growth', 'agency', 'enterprise')),
     monthly_credits integer not null default 10,
     used_credits integer not null default 0,
@@ -17,13 +17,13 @@ create table if not exists public.organizations (
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- 2. プロジェクトテーブル
+-- 2. プロジェクトテーブル (業界不問の汎用プレースホルダー)
 create table if not exists public.projects (
     id uuid primary key default gen_random_uuid(),
     organization_id uuid references public.organizations(id) on delete cascade not null,
-    name text not null default 'Ailo',
-    domain text not null default 'https://ailo.jp',
-    competitors text[] default array['Speak', 'プログリット', 'DMM英会話', 'ビズメイツ']::text[],
+    name text not null default '自社ブランド',
+    domain text not null default 'https://example.com',
+    competitors text[] default array[]::text[],
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -111,9 +111,7 @@ create policy "aeo_articles_policy" on public.aeo_articles
         )
     );
 
--- ============================================================
 -- 7. アトミックなクレジット消費関数 (TOCTOU防止 & 所有者厳格検証)
--- ============================================================
 create or replace function public.consume_credit(org_id uuid)
 returns boolean as $$
 declare
@@ -131,7 +129,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 8. 新規ユーザー登録時の自動初期化トリガー
+-- 8. 新規ユーザー登録時の自動初期化トリガー (クリーンな汎用プレースホルダー)
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -142,7 +140,7 @@ begin
     returning id into new_org_id;
 
     insert into public.projects (organization_id, name, domain, competitors)
-    values (new_org_id, 'Ailo', 'https://ailo.jp', array['Speak', 'プログリット', 'DMM英会話', 'ビズメイツ']);
+    values (new_org_id, '自社ブランド', 'https://example.com', array[]::text[]);
 
     return new;
 end;

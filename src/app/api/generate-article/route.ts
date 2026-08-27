@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     const { 
       prompt, 
-      brandName = "Ailo", 
+      brandName = "自社ブランド", 
       fanoutQueries = [], 
       targetLanguage = "ja" 
     } = await req.json();

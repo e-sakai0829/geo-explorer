@@ -54,8 +54,8 @@ export async function POST(req: NextRequest) {
 
     const { 
       prompt, 
-      brandName = "Ailo", 
-      competitors = ["Speak", "プログリット", "DMM英会話", "ビズメイツ"],
+      brandName = "自社ブランド", 
+      competitors = [],
       targetLocale = "ja-JP"
     } = await req.json();
 
@@ -106,9 +106,13 @@ export async function POST(req: NextRequest) {
     );
 
     const competitorMentions: Record<string, boolean> = {};
-    competitors.forEach((comp: string) => {
-      competitorMentions[comp] = text.toLowerCase().includes(comp.toLowerCase());
-    });
+    if (Array.isArray(competitors)) {
+      competitors.forEach((comp: string) => {
+        if (comp) {
+          competitorMentions[comp] = text.toLowerCase().includes(comp.toLowerCase());
+        }
+      });
+    }
 
     // 5. プロジェクト取得または作成
     let projectId = "";

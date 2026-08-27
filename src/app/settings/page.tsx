@@ -26,9 +26,9 @@ export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [userEmail, setUserEmail] = useState<string>("");
-  const [targetBrand, setTargetBrand] = useState("Ailo");
-  const [targetDomain, setTargetDomain] = useState("https://ailo.jp");
-  const [competitors, setCompetitors] = useState("Speak, プログリット, DMM英会話, ビズメイツ");
+  const [targetBrand, setTargetBrand] = useState("自社ブランド");
+  const [targetDomain, setTargetDomain] = useState("https://example.com");
+  const [competitors, setCompetitors] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -46,12 +46,12 @@ export default function SettingsPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.project) {
-          setTargetBrand(data.project.name || "Ailo");
-          setTargetDomain(data.project.domain || "https://ailo.jp");
+          setTargetBrand(data.project.name || "自社ブランド");
+          setTargetDomain(data.project.domain || "https://example.com");
           setCompetitors(
-            Array.isArray(data.project.competitors)
+            Array.isArray(data.project.competitors) && data.project.competitors.length > 0
               ? data.project.competitors.join(", ")
-              : "Speak, プログリット, DMM英会話, ビズメイツ"
+              : ""
           );
         }
       })
@@ -273,6 +273,7 @@ export default function SettingsPage() {
                 type="text"
                 value={targetBrand}
                 onChange={(e) => setTargetBrand(e.target.value)}
+                placeholder="例: トラディショナルアート / 自社サービス名"
                 required
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
               />
@@ -286,6 +287,7 @@ export default function SettingsPage() {
                 type="url"
                 value={targetDomain}
                 onChange={(e) => setTargetDomain(e.target.value)}
+                placeholder="https://example.com"
                 required
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
               />
@@ -300,6 +302,7 @@ export default function SettingsPage() {
               type="text"
               value={competitors}
               onChange={(e) => setCompetitors(e.target.value)}
+              placeholder="例: 競合A社, 競合B社, 競合C社"
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
             />
             <p className="text-[10px] text-slate-400 mt-1">
