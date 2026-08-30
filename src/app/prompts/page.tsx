@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase-browser";
 import { 
   Search, 
   Sparkles, 
@@ -13,14 +14,18 @@ import {
   Loader2, 
   Globe, 
   Zap,
-  LogIn
+  LogIn,
+  Gift
 } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 
 function PromptsContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createClient();
   const { lang, t } = useLanguage();
+
   const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
   const [competitors, setCompetitors] = useState<string[]>([]);
@@ -28,6 +33,14 @@ function PromptsContent() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+
+  // 認証状態の監視
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data?.user || null);
+    });
+  }, [supabase]);
 
   // URLパラメータから検索クエリ(prompt or q)を自動セット
   useEffect(() => {
@@ -60,6 +73,12 @@ function PromptsContent() {
     if (e) e.preventDefault();
     if (!prompt) return;
 
+    // 未ログインの場合はログイン画面へ誘導
+    if (!user) {
+      router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(prompt)}`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
@@ -77,7 +96,13 @@ function PromptsContent() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "解析に失敗しました。");
+      if (!res.ok) {
+        if (res.status === 401) {
+          router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(prompt)}`);
+          return;
+        }
+        throw new Error(data.error || "解析に失敗しました。");
+      }
 
       setResult(data);
     } catch (err: any) {
@@ -101,6 +126,26 @@ function PromptsContent() {
         <p className="text-xs text-slate-500 mt-1">
           {t.prompts_desc}
         </p>
+
+        {!user && (
+          <div className="mt-4 p-3.5 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-indigo-950 font-medium">
+              <span className="p-1 bg-indigo-600 text-white rounded-md shrink-0">
+                <Gift className="w-3.5 h-3.5" />
+              </span>
+              <span>
+                <strong>無料アカウント登録（カード不要）</strong>で、毎月10回のAI検索リアルタイムスキャンが無料でご利用いただけます。
+              </span>
+            </div>
+            <Link
+              href={`/login?redirect=prompts${prompt ? `&prompt=${encodeURIComponent(prompt)}` : ""}`}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 text-xs shadow-2xs"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              無料登録 / ログイン
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Search Input Box */}

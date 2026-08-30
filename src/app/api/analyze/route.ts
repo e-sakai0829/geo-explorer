@@ -4,41 +4,49 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. 認証・ユーザーチェック（ログイン時はクレジット消費、未ログイン時はお試しゲスト実行）
+    // 1. 認証・ユーザーチェック（解析実行には無料登録・ログインが必須）
     const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { 
+          error: "リアルタイム解析を実行するには無料アカウント登録・ログインが必要です。新規登録で毎月10クエリ無料スキャンがご利用いただけます。",
+          loginRequired: true 
+        }, 
+        { status: 401 }
+      );
+    }
 
     let orgId: string | null = null;
     let creditsRemaining = 10;
 
-    if (user) {
-      // ユーザーの組織情報を取得
-      const { data: org } = await supabase
-        .from("organizations")
-        .select("id, plan, monthly_credits, used_credits")
-        .eq("user_id", user.id)
-        .single();
+    // ユーザーの組織情報を取得
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("id, plan, monthly_credits, used_credits")
+      .eq("user_id", user.id)
+      .single();
 
-      if (org) {
-        orgId = org.id;
-        // アトミックなクレジット消費チェック
-        const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
+    if (org) {
+      orgId = org.id;
+      // アトミックなクレジット消費チェック
+      const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
 
-        if (rpcError) {
-          console.error("consume_credit RPC error:", rpcError);
-        } else if (!creditConsumed) {
-          return NextResponse.json(
-            { 
-              error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
-              upgradeRequired: true,
-              currentCredits: org.monthly_credits,
-              usedCredits: org.used_credits,
-            }, 
-            { status: 403 }
-          );
-        }
-        creditsRemaining = Math.max(0, org.monthly_credits - (org.used_credits + 1));
+      if (rpcError) {
+        console.error("consume_credit RPC error:", rpcError);
+      } else if (!creditConsumed) {
+        return NextResponse.json(
+          { 
+            error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
+            upgradeRequired: true,
+            currentCredits: org.monthly_credits,
+            usedCredits: org.used_credits,
+          }, 
+          { status: 403 }
+        );
       }
+      creditsRemaining = Math.max(0, org.monthly_credits - (org.used_credits + 1));
     }
 
     const { 
@@ -69,9 +77,9 @@ export async function POST(req: NextRequest) {
       scanPrompt = `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`;
     }
 
-    // Gemini 3.7 Flash + Google Search Grounding によるリアルタイムスキャン
+    // Gemini 1.5 Flash + Google Search Grounding によるリアルタイムスキャン
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: scanPrompt,
       config: {
         tools: [{ googleSearch: {} }],

@@ -115,7 +115,7 @@ Format the output in clean, valid Markdown with an engaging H1 title.
 
     // 4. AIによる記事生成
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
       config: {
         systemInstruction: systemPrompt,

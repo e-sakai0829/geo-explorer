@@ -77,7 +77,15 @@ function LoginForm() {
       });
       if (error) throw error;
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Googleログインに失敗しました。" });
+      const errMsg = err.message || "";
+      if (errMsg.includes("provider is not enabled") || errMsg.includes("validation_failed")) {
+        setMessage({
+          type: "error",
+          text: "Googleログインは現在Supabase設定の準備中です。下の「メールアドレス」入力欄からすぐにご登録・ログインいただけます。",
+        });
+      } else {
+        setMessage({ type: "error", text: errMsg || "Googleログインに失敗しました。" });
+      }
       setLoading(false);
     }
   };
