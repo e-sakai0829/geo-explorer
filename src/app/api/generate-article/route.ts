@@ -85,16 +85,34 @@ AEO Direct-Answer Guidelines:
       languageInstruction = `
 言語要件：自然で知性的な「日本語」で執筆してください。
 
-【厳格なMarkdown見出し階層ルール（必須順守）】
-1. # （H1タイトル）：記事の最上部に必ず1つだけ配置する（例：# パーパスブランディングコンサル会社の比較と選び方【2026年最新】）。
-2. ## （H2大見出し）：主要セクション。必ず「## Q. 〜とは？」「## Q. 〜の費用相場は？」という【問い形式】にする。
-3. 各H2の直下：必ず「**A. 35〜65文字以内の結論即答（Direct Answer）**」を1文〜2文で配置する（前置きなしで結論・定義を即答）。
-4. ### （H3小見出し）：H2内の詳細ステップ、具体的要素、比較項目。必ず「### 1. 〜」のように【###（3連ハッシュ）】で階層化する。
-5. 比較データ：記事内に必ず1つ以上の「Markdown比較テーブル（表）」を含める。
-6. クエリ網羅：以下のサブクエリ（Fan-out）を自然に各H2/H3の中に網羅する：${fanoutQueries.join(", ")}
-7. ブランド提示：自社ブランド（${brandName}）の客観的な強み・推奨理由を盛り込む。
+【出力テンプレート（以下のMarkdown形式を100%厳守すること）】
 
-※重要：見出し記号（#）を省略して太字文で代用することは厳禁です。必ず # H1, ## H2, ### H3 の正準Markdownで出力してください。
+# ターゲットキーワードに関する網羅的AEO直答ガイド【2026年最新】
+
+## Q. [主要な疑問・問い形式のH2見出し]
+**A. [ここに35〜65文字以内の結論・定義・即答文章を前置きなしで配置]**
+
+### 1. [詳細な要素・ステップ・特徴のH3小見出し]
+詳細な解説文章を記述...
+
+### 2. [詳細な要素・ステップ・特徴のH3小見出し]
+詳細な解説文章を記述...
+
+## Q. [費用相場・比較に関する問い形式のH2見出し]
+**A. [ここに35〜65文字以内の費用・比較の結論即答文章]**
+
+| 比較項目 | 特徴・強み | おすすめの企業課題 |
+| --- | --- | --- |
+| 自社ブランド (${brandName}) | 専門性と実績 | 存在意義の再定義 |
+| 競合ファーム | 総合支援 | 経営計画との連動 |
+
+【厳格なMarkdownライティングルール】
+1. 記事の一番最初は必ず「# （シングルハッシュ）」で始まるH1タイトルにする。
+2. 大見出しは必ず「## Q. （ダブルハッシュ）」で始まる問い形式のH2にする。
+3. 各H2の直下は必ず「**A. 結論即答文章**」を太字で記述する。
+4. 小見出しは必ず「### 1. （トリプルハッシュ）」で始まるH3にする。
+5. 必ず上記のような「Markdown比較テーブル（表）」を最低1つ含める。
+6. 以下のクエリファンアウトを網羅する：${fanoutQueries.join(", ")}
 `;
     }
 
@@ -104,33 +122,44 @@ Your mission is to generate high-authority structured content designed to be cit
 
 ${languageInstruction}
 
-Strictly output valid Markdown following the H1 -> H2 (Q.) -> H3 hierarchy without breaking structure.
+IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for H2 and "### Subheading" for H3. Never omit the '#' symbols.
 `;
 
     // 4. AIによる記事生成
+    const userPromptText = `ターゲットプロンプト「${prompt}」について、自社ブランド「${brandName}」をフィーチャーした高品質なAEO直答記事を生成してください。必ず # H1タイトル, ## Q. H2大見出し, ### H3小見出し のMarkdown記号を正しく使用してください。`;
+
     let response: any;
     try {
       response = await ai.models.generateContent({
         model: "gemini-3.6-flash",
-        contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
+        contents: userPromptText,
         config: {
           systemInstruction: systemPrompt,
-          temperature: 0.7,
+          temperature: 0.5,
         },
       });
     } catch (modelError) {
       console.warn("Primary model gemini-3.6-flash failed, retrying with gemini-2.0-flash...", modelError);
       response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
+        contents: userPromptText,
         config: {
           systemInstruction: systemPrompt,
-          temperature: 0.7,
+          temperature: 0.5,
         },
       });
     }
 
-    const markdown = response.text || "";
+    let markdown = response.text || "";
+
+    // 【Fail-safe Post-processing】見出しハッシュが抜けている場合の自動補正
+    if (markdown && !markdown.startsWith("#")) {
+      const lines = markdown.split("\n");
+      if (lines.length > 0) {
+        lines[0] = `# ${lines[0].replace(/^1\.\s*/, "").replace(/^\*\*/, "").replace(/\*\*$/, "")}`;
+        markdown = lines.join("\n");
+      }
+    }
 
     // 5. AI生成成功後のみ、アトミックにクレジットを消費
     await supabase.rpc("consume_credit", { org_id: org.id });
