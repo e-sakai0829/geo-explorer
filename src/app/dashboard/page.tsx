@@ -88,19 +88,47 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/settings"
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer"
           >
-            {t.settings}
+            <span>⚙️ プロジェクト・競合設定</span>
           </Link>
           <Link
             href="/prompts"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Search className="w-3.5 h-3.5" />
             {lang === "zh-TW" ? "掃描提示詞" : lang === "en" ? "Scan Prompt" : "プロンプトをスキャン"}
           </Link>
         </div>
       </div>
+
+      {/* Prominent Project Onboarding Banner (CVR向上CTA) */}
+      {(domain.includes("example.com") || brandName === "自社ブランド" || competitors.length === 0) && (
+        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 p-6 rounded-2xl text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6 border border-indigo-500/30 relative overflow-hidden">
+          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+          
+          <div className="space-y-2 max-w-2xl relative z-10">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 text-[11px] font-bold border border-indigo-400/30">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+              ステップ 1：より精密なAI検索露出診断のために
+            </div>
+            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+              自社サイトURLと競合ブランドを登録して、AI言及・引用シェア率を正確に測定しましょう！
+            </h2>
+            <p className="text-xs text-indigo-200/90 leading-relaxed">
+              自社のブランド名・公式サイトURL・ライバル企業名を設定することで、Google AI Overviews / Gemini における自社の露出・引用状況や競合とのギャップ分析がより高精度に可視化されます。
+            </p>
+          </div>
+
+          <Link
+            href="/settings"
+            className="px-6 py-3 bg-white hover:bg-indigo-50 text-indigo-900 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer hover:scale-[1.02] relative z-10"
+          >
+            <span>自社サイト・競合を今すぐ登録する</span>
+            <ArrowRight className="w-4 h-4 text-indigo-600" />
+          </Link>
+        </div>
+      )}
 
       {/* 3 Core KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
