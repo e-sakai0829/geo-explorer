@@ -521,24 +521,30 @@ function PromptsContent() {
           </div>
 
           {/* Action CTA: Generate AEO Article */}
-          <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
-            <div className="space-y-1">
-              <div className="font-bold text-sm flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                AEO直答記事を自動生成して言及・引用を獲得
+          <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 sm:p-7 rounded-2xl text-white space-y-4 shadow-md border border-indigo-500/30">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="font-bold text-base flex items-center gap-2 text-white">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  AEO直答記事を自動生成して言及・引用を獲得
+                </div>
+                <p className="text-xs text-indigo-200">
+                  AIが回答で優先引用する構造化コンテンツテンプレートをAIエディタで即時作成できます
+                </p>
               </div>
-              <p className="text-xs text-indigo-200">
-                AIが回答で優先引用する構造化コンテンツテンプレートをAIエディタで即時作成できます
-              </p>
+
+              <Link
+                href={`/editor?prompt=${encodeURIComponent(result.prompt)}`}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span>直答記事を作成する</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
 
-            <Link
-              href={`/editor?prompt=${encodeURIComponent(result.prompt)}`}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0"
-            >
-              <span>直答記事を作成する</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="pt-3 border-t border-indigo-500/20 text-[11px] text-indigo-200/90 leading-relaxed">
+              💡 <strong>プロコンサルタントからのアドバイス：</strong> AIで生成されたマークダウン記事を【ベース（下書き）】として参考にし、自社ならではの事例や独自の一次情報を加筆してカスタマイズすることで、Googleの量産コンテンツ評価を回避し、AI検索・SEOの両方で最高の評価を獲得できます。
+            </div>
           </div>
         </div>
       )}

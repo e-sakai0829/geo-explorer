@@ -12,6 +12,7 @@ import {
   Loader2, 
   Globe, 
   CheckCircle2,
+  AlertCircle,
   RefreshCw,
   ExternalLink
 } from "lucide-react";
@@ -214,12 +215,23 @@ function EditorInner() {
 
             <button
               type="submit"
-              disabled={loading || !prompt}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              disabled={loading}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {loading ? t.editor_generating : t.editor_btn_generate}
+              {t.editor_btn_generate}
             </button>
+
+            {/* Quality Guideline Notice (信頼性を高める注記カード) */}
+            <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-300/80 text-amber-950 space-y-1.5 text-xs shadow-2xs">
+              <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>検索評価（SEO/GEO）を高めるための重要ガイドライン</span>
+              </div>
+              <p className="text-[11px] text-amber-900/90 leading-relaxed pl-5">
+                ※AIで自動生成された文章をそのまま未修正で大量公開すると、Googleから「量産コンテンツ」として低評価を受けるリスクがあります。本機能で生成された構造化マークダウンを<strong>【骨組み・下書き】</strong>として参考にし、自社ならではの一次情報、具体的な事例、独自の強みを加筆・カスタマイズして公開いただくことで、AI検索・SEOの両方で最高の評価を獲得できます。
+              </p>
+            </div>
           </form>
         </div>
 
