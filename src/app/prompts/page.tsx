@@ -249,45 +249,45 @@ function PromptsContent() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className={`p-5 rounded-2xl border ${result.brandMentioned ? "bg-emerald-50/60 border-emerald-200" : "bg-rose-50/60 border-rose-200"}`}>
               <div className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                {t.prompts_brand_mentioned}
+                ターゲットKWのAI認知状況
               </div>
               <div className="flex items-center gap-2">
                 {result.brandMentioned ? (
                   <>
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span className="text-lg font-black text-emerald-900">言及されています！</span>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span className="text-base font-black text-emerald-950">狙いたいKWは間違っていません</span>
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="w-5 h-5 text-rose-600" />
-                    <span className="text-lg font-black text-rose-900">言及なし（要対策）</span>
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                    <span className="text-base font-black text-rose-900">AI未認知 (KW強化が必要)</span>
                   </>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                AI生成回答テキスト内にブランド名 「{result.brandName}」 が露出しています
+              <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+                AI検索の回答文内に「{result.brandName}」が主要な関連キーワードとして正しく認識・露出されています
               </p>
             </div>
 
             <div className={`p-5 rounded-2xl border ${result.brandCited ? "bg-emerald-50/60 border-emerald-200" : "bg-amber-50/60 border-amber-200"}`}>
               <div className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                {t.prompts_brand_cited}
+                自社URLの直接参照状況
               </div>
               <div className="flex items-center gap-2">
                 {result.brandCited ? (
                   <>
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span className="text-lg font-black text-emerald-900">公式ドメイン引用中</span>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span className="text-base font-black text-emerald-950">自社サイトから直接参照されています</span>
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="w-5 h-5 text-amber-600" />
-                    <span className="text-lg font-black text-amber-900">直接引用なし</span>
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span className="text-base font-black text-amber-900">自社サイトからは参照されていません (要対策)</span>
                   </>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                AIが回答の参照元ウェブソースカードとして自社サイトURLを直接提示しています
+              <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+                AIが回答の信頼参照元（Web Card）として自社サイトURLを提示できておらず、他社メディアに流入を奪われています
               </p>
             </div>
 
@@ -384,6 +384,101 @@ function PromptsContent() {
               )}
             </div>
           </div>
+
+          {/* GEO / LLMO Expert Consultant Advice Card (コンサル診断＆対策処方箋 - 常時表示) */}
+          {(() => {
+            const adviceData = result.consultantAdvice || {
+              overallDiagnosis: result.brandMentioned
+                ? `ターゲットKWにおける「${result.brandName}」のポジショニング・認知方向性は間違っていません。AI回答内に主要キーワードとして正しく出現しています。`
+                : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。キーワード関連性をAIに認識させるコンテンツ強化が必要です。`,
+              citationStrategy: result.brandCited
+                ? `【良好】自社サイト(URL)から直接参照されています。現在のAEO構造コンテンツを維持・拡充してください。`
+                : `【要対策】自社サイト(URL)からは参照されていません。AI回答内の参照カード枠（Web Card）は他社メディアが占有しているため、自社サイトに直答コンテンツを設置し引用枠を奪還する必要があります。`,
+              actionPillars: [
+                {
+                  title: "1. AI「おすすめソリューション・パートナー枠」での自社名露出対策",
+                  desc: "AI回答内の「おすすめ支援会社一覧」等の推薦セクションで自社の社名が直接選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを自社サイトに配置します。"
+                },
+                {
+                  title: "2. 自社サイト(URL)からの直接参照（Web Card）奪還",
+                  desc: "他社メディアが独占している参照リンク枠を取り戻すため、見出しのQ&A化と直後の35〜65文字結論（即答文章）を自社ドメイン内に配置します。"
+                },
+                {
+                  title: "3. 一次情報構造＆基本SEO（JSON-LD構造化データ）の徹底",
+                  desc: "自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが自社の専門性を正しく解析できるセマンティックHTML（H2/H3）を徹底します。"
+                },
+                {
+                  title: "4. 比較サイト・外部メディアへのサイテーション露出拡大",
+                  desc: "AIは第三者メディアの言及も重視します。無料掲載できる業界比較DB、PR TIMES、NewsPicks等への出稿努力を行い、外部での自社言及（サイテーション）を獲得します。"
+                }
+              ]
+            };
+
+            return (
+              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-500/30 space-y-6 relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-indigo-500/30 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
+                      <Sparkles className="w-5 h-5 text-indigo-300" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                        GEO / LLMO コンサルティング診断
+                      </span>
+                      <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
+                        💡 専門コンサルタントによる現状診断＆改善アドバイス
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Diagnosis Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="bg-indigo-900/40 p-4 rounded-2xl border border-indigo-400/30 space-y-1.5">
+                    <div className="font-bold text-indigo-200 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ① AI認知・ポジショニング評価
+                    </div>
+                    <p className="text-slate-200 leading-relaxed">
+                      {adviceData.overallDiagnosis}
+                    </p>
+                  </div>
+
+                  <div className="bg-indigo-900/40 p-4 rounded-2xl border border-indigo-400/30 space-y-1.5">
+                    <div className="font-bold text-indigo-200 flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      ② 参照リンク（自社URL）獲得戦略
+                    </div>
+                    <p className="text-slate-200 leading-relaxed">
+                      {adviceData.citationStrategy}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4 Action Pillars */}
+                <div className="space-y-3 pt-2">
+                  <div className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                    📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {adviceData.actionPillars.map((pillar: any, idx: number) => (
+                      <div key={idx} className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
+                        <div className="font-bold text-white text-xs flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span>{pillar.title}</span>
+                        </div>
+                        <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                          {pillar.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Action CTA: Generate AEO Article */}
           <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
