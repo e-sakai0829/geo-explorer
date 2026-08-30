@@ -162,7 +162,6 @@ export default function LandingPage() {
               type="text"
               name="prompt"
               placeholder={t.search_placeholder}
-              defaultValue={t.search_placeholder.replace("例: ", "").replace("例如: ", "").replace("e.g., ", "")}
               className="flex-1 bg-transparent px-3 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-hidden"
             />
             <button

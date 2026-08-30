@@ -101,9 +101,12 @@ export default function SettingsPage() {
     }
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/user/project", {
         method: "POST",
@@ -115,11 +118,13 @@ export default function SettingsPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("設定の保存に失敗しました。");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "設定の保存に失敗しました。");
+
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setTimeout(() => setSaved(false), 4000);
     } catch (err: any) {
-      alert("エラー: " + err.message);
+      setSaveError(err.message);
     } finally {
       setSaving(false);
     }
@@ -339,20 +344,34 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-          <div className="text-xs text-emerald-600 font-bold flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div>
             {saved && (
-              <>
+              <div className="text-xs text-emerald-600 font-bold flex items-center gap-1.5">
                 <Check className="w-4 h-4" />
                 {t.saved}
-              </>
+              </div>
+            )}
+            {saveError && (
+              <div className="text-xs text-rose-600 font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{saveError}</span>
+                {saveError.includes("ログイン") && (
+                  <Link
+                    href="/login"
+                    className="ml-2 px-2.5 py-1 bg-rose-600 text-white font-bold text-[11px] rounded-lg hover:bg-rose-700 transition-colors"
+                  >
+                    ログインへ
+                  </Link>
+                )}
+              </div>
             )}
           </div>
 
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
           >
             {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             {t.set_btn_save}

@@ -4,52 +4,41 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. 認証チェック
+    // 1. 認証・ユーザーチェック（ログイン時はクレジット消費、未ログイン時はお試しゲスト実行）
     const supabase = await createServerSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "ログインが必要です。ログイン後に再度お試しください。" }, 
-        { status: 401 }
-      );
-    }
+    let orgId: string | null = null;
+    let creditsRemaining = 10;
 
-    // 2. ユーザーの組織情報を取得
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .select("id, plan, monthly_credits, used_credits")
-      .eq("user_id", user.id)
-      .single();
+    if (user) {
+      // ユーザーの組織情報を取得
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id, plan, monthly_credits, used_credits")
+        .eq("user_id", user.id)
+        .single();
 
-    if (orgError || !org) {
-      return NextResponse.json(
-        { error: "組織情報が見つかりません。サポートへお問い合わせください。" }, 
-        { status: 404 }
-      );
-    }
+      if (org) {
+        orgId = org.id;
+        // アトミックなクレジット消費チェック
+        const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
 
-    // 3. アトミックなクレジット消費チェック (Fail-closed & 所有者検証)
-    const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
-
-    if (rpcError) {
-      console.error("consume_credit RPC error:", rpcError);
-      return NextResponse.json(
-        { error: "クレジット決済システムでエラーが発生しました。時間を置いて再度お試しください。" },
-        { status: 500 }
-      );
-    }
-
-    if (!creditConsumed) {
-      return NextResponse.json(
-        { 
-          error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
-          upgradeRequired: true,
-          currentCredits: org.monthly_credits,
-          usedCredits: org.used_credits,
-        }, 
-        { status: 403 }
-      );
+        if (rpcError) {
+          console.error("consume_credit RPC error:", rpcError);
+        } else if (!creditConsumed) {
+          return NextResponse.json(
+            { 
+              error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
+              upgradeRequired: true,
+              currentCredits: org.monthly_credits,
+              usedCredits: org.used_credits,
+            }, 
+            { status: 403 }
+          );
+        }
+        creditsRemaining = Math.max(0, org.monthly_credits - (org.used_credits + 1));
+      }
     }
 
     const { 
@@ -124,57 +113,58 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5. プロジェクト取得または作成
-    let projectId = "";
-    const { data: project } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("organization_id", org.id)
-      .limit(1)
-      .single();
-
-    if (project) {
-      projectId = project.id;
-    } else {
-      const { data: newProj } = await supabase
+    // 5. ログイン時のみDBへ記録保存
+    if (orgId) {
+      let projectId = "";
+      const { data: project } = await supabase
         .from("projects")
-        .insert({
-          organization_id: org.id,
-          name: brandName,
-          domain: "https://example.com",
-          competitors: competitors,
-        })
         .select("id")
-        .single();
-      projectId = newProj?.id || "";
-    }
-
-    // 6. DBへのログ書き込み
-    if (projectId) {
-      const { data: tp } = await supabase
-        .from("tracked_prompts")
-        .insert({
-          project_id: projectId,
-          prompt_text: prompt,
-          target_locale: targetLocale,
-          last_scanned_at: new Date().toISOString(),
-        })
-        .select("id")
+        .eq("organization_id", orgId)
+        .limit(1)
         .single();
 
-      if (tp?.id) {
-        await supabase
-          .from("prompt_analysis_logs")
+      if (project) {
+        projectId = project.id;
+      } else {
+        const { data: newProj } = await supabase
+          .from("projects")
           .insert({
-            prompt_id: tp.id,
-            ai_overview_present: true,
-            brand_mentioned: brandMentioned,
-            brand_cited: brandCited,
-            raw_response: text,
-            fanout_queries: searchQueries,
-            citation_sources: webSources,
-            competitor_mentions: competitorMentions,
-          });
+            organization_id: orgId,
+            name: brandName,
+            domain: "https://example.com",
+            competitors: competitors,
+          })
+          .select("id")
+          .single();
+        projectId = newProj?.id || "";
+      }
+
+      if (projectId) {
+        const { data: tp } = await supabase
+          .from("tracked_prompts")
+          .insert({
+            project_id: projectId,
+            prompt_text: prompt,
+            target_locale: targetLocale,
+            last_scanned_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (tp?.id) {
+          await supabase
+            .from("prompt_analysis_logs")
+            .insert({
+              prompt_id: tp.id,
+              ai_overview_present: true,
+              brand_mentioned: brandMentioned,
+              brand_cited: brandCited,
+              raw_response: text,
+              fanout_queries: searchQueries,
+              citation_sources: webSources,
+              competitor_mentions: competitorMentions,
+            });
+        }
       }
     }
 
@@ -187,7 +177,7 @@ export async function POST(req: NextRequest) {
       fanoutQueries: searchQueries,
       citationSources: webSources,
       competitorMentions,
-      creditsRemaining: Math.max(0, org.monthly_credits - (org.used_credits + 1)),
+      creditsRemaining,
     });
   } catch (error: any) {
     console.error("Analysis API Error:", error);

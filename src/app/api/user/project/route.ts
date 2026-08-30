@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "未認証です。" }, { status: 401 });
+      return NextResponse.json({ error: "設定の保存にはログインが必要です。" }, { status: 401 });
     }
 
     // ユーザーの組織とプロジェクトを取得
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "未認証です。" }, { status: 401 });
+      return NextResponse.json({ error: "設定の保存にはログインが必要です。ログイン後に再度お試しください。" }, { status: 401 });
     }
 
     const { name, domain, competitors } = await req.json();
