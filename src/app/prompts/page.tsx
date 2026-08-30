@@ -312,80 +312,7 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* AI Response Text Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                Google AI Overviews / Gemini リアルタイムスキャン回答
-              </div>
-              <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-2 py-0.5 rounded border border-slate-200">
-                Search Grounded Response
-              </span>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-              {result.aiResponse}
-            </div>
-
-            {/* Fanout Sub-queries */}
-            {result.fanoutQueries && result.fanoutQueries.length > 0 && (
-              <div className="pt-2 space-y-2">
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                  {t.prompts_fanout_title} (Fan-out Subqueries)
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {result.fanoutQueries.map((q: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-medium flex items-center gap-1"
-                    >
-                      <span>🔍</span> {q}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Web Citation Sources */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ExternalLink className="w-4 h-4 text-indigo-600" />
-                {t.prompts_sources_title} ({result.citationSources?.length || 0}件)
-              </div>
-              <span className="text-xs text-slate-400 font-normal">AIが参照元として引用した信頼Webソース</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {result.citationSources && result.citationSources.length > 0 ? (
-                result.citationSources.map((src: any, idx: number) => (
-                  <a
-                    key={idx}
-                    href={src.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-200 rounded-xl transition-all flex items-start justify-between group"
-                  >
-                    <div className="space-y-1 min-w-0 pr-2">
-                      <div className="font-bold text-xs text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
-                        {src.title}
-                      </div>
-                    </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 shrink-0 mt-0.5 ml-2" />
-                  </a>
-                ))
-              ) : (
-                <div className="col-span-2 text-xs text-slate-400 p-4 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  引用Webソースが見つかりませんでした。
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* GEO / LLMO Expert Consultant Advice Card (コンサル診断＆対策処方箋 - 常時表示) */}
+          {/* GEO / LLMO Expert Consultant Advice Card (コンサル診断＆対策処方箋 - 2番目の最優先位置へ配置) */}
           {(() => {
             const adviceData = result.consultantAdvice || {
               overallDiagnosis: result.brandMentioned
@@ -479,6 +406,79 @@ function PromptsContent() {
               </div>
             );
           })()}
+
+          {/* AI Response Text Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                Google AI Overviews / Gemini リアルタイムスキャン回答
+              </div>
+              <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-2 py-0.5 rounded border border-slate-200">
+                Search Grounded Response
+              </span>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
+              {result.aiResponse}
+            </div>
+
+            {/* Fanout Sub-queries */}
+            {result.fanoutQueries && result.fanoutQueries.length > 0 && (
+              <div className="pt-2 space-y-2">
+                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  {t.prompts_fanout_title} (Fan-out Subqueries)
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {result.fanoutQueries.map((q: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-medium flex items-center gap-1"
+                    >
+                      <span>🔍</span> {q}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Web Citation Sources */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+            <div className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ExternalLink className="w-4 h-4 text-indigo-600" />
+                {t.prompts_sources_title} ({result.citationSources?.length || 0}件)
+              </div>
+              <span className="text-xs text-slate-400 font-normal">AIが参照元として引用した信頼Webソース</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {result.citationSources && result.citationSources.length > 0 ? (
+                result.citationSources.map((src: any, idx: number) => (
+                  <a
+                    key={idx}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-200 rounded-xl transition-all flex items-start justify-between group"
+                  >
+                    <div className="space-y-1 min-w-0 pr-2">
+                      <div className="font-bold text-xs text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                        {src.title}
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 shrink-0 mt-0.5 ml-2" />
+                  </a>
+                ))
+              ) : (
+                <div className="col-span-2 text-xs text-slate-400 p-4 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  引用Webソースが見つかりませんでした。
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Action CTA: Generate AEO Article */}
           <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
