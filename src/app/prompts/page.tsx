@@ -312,100 +312,140 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* GEO / LLMO Expert Consultant Advice Card (コンサル診断＆対策処方箋 - 2番目の最優先位置へ配置) */}
-          {(() => {
-            const adviceData = result.consultantAdvice || {
-              overallDiagnosis: result.brandMentioned
-                ? `ターゲットKWにおける「${result.brandName}」のポジショニング・認知方向性は間違っていません。AI回答内に主要キーワードとして正しく出現しています。`
-                : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。キーワード関連性をAIに認識させるコンテンツ強化が必要です。`,
-              citationStrategy: result.brandCited
-                ? `【良好】自社サイト(URL)から直接参照されています。現在のAEO構造コンテンツを維持・拡充してください。`
-                : `【要対策】自社サイト(URL)からは参照されていません。AI回答内の参照カード枠（Web Card）は他社メディアが占有しているため、自社サイトに直答コンテンツを設置し引用枠を奪還する必要があります。`,
-              actionPillars: [
-                {
-                  title: "1. AI「おすすめソリューション・パートナー枠」での自社名露出対策",
-                  desc: "AI回答内の「おすすめ支援会社一覧」等の推薦セクションで自社の社名が直接選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを自社サイトに配置します。"
-                },
-                {
-                  title: "2. 自社サイト(URL)からの直接参照（Web Card）奪還",
-                  desc: "他社メディアが独占している参照リンク枠を取り戻すため、見出しのQ&A化と直後の35〜65文字結論（即答文章）を自社ドメイン内に配置します。"
-                },
-                {
-                  title: "3. 一次情報構造＆基本SEO（JSON-LD構造化データ）の徹底",
-                  desc: "自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが自社の専門性を正しく解析できるセマンティックHTML（H2/H3）を徹底します。"
-                },
-                {
-                  title: "4. 比較サイト・外部メディアへのサイテーション露出拡大",
-                  desc: "AIは第三者メディアの言及も重視します。無料掲載できる業界比較DB、PR TIMES、NewsPicks等への出稿努力を行い、外部での自社言及（サイテーション）を獲得します。"
-                }
-              ]
-            };
+          {/* ① & ② GEO Expert Diagnosis Cards (AI認知評価 ＆ 自社URL参照戦略 - Gemini回答のすぐ上に配置) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                  ① AI認知・ポジショニング評価
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h4 className="text-sm font-bold text-emerald-300">
+                狙いたいキーワード（KW）の認知・方向性は間違っていません
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {result.brandMentioned
+                  ? `AIのナレッジ空間で「${result.brandName}」が主要な関連キーワードとして正しく認知・露出されており、検索ニーズとのポジショニングは良好です。`
+                  : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。「${result.prompt}」に関連する自社の強みをAIに学ばせるコンテンツ強化が必要です。`}
+              </p>
+            </div>
 
-            return (
-              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-500/30 space-y-6 relative overflow-hidden">
-                <div className="flex items-center justify-between border-b border-indigo-500/30 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
-                      <Sparkles className="w-5 h-5 text-indigo-300" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
-                        GEO / LLMO コンサルティング診断
-                      </span>
-                      <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
-                        💡 専門コンサルタントによる現状診断＆改善アドバイス
-                      </h3>
-                    </div>
-                  </div>
+            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                  ② 参照リンク（自社URL）獲得戦略
+                </span>
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+              </div>
+              <h4 className="text-sm font-bold text-amber-300">
+                自社サイト（URL）からは参照されていません（要対策）
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {result.brandCited
+                  ? `【良好】公式ドメインが直接参照元（Web Card）として獲得できています。現在のAEO構造を維持・拡張してください。`
+                  : `AI回答内でブランドが言及されているものの、参照元Webカードは他社メディア（ニュース・比較サイト等）が占有しています。自社サイト内に「AIが直答として抽出できる構造化コンテンツ」を掲載し、引用枠を奪還してください。`}
+              </p>
+            </div>
+          </div>
+
+          {/* AI Response Text Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                Google AI Overviews / Gemini リアルタイムスキャン回答
+              </div>
+              <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-2 py-0.5 rounded border border-slate-200">
+                Search Grounded Response
+              </span>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
+              {result.aiResponse}
+            </div>
+
+            {/* Fanout Sub-queries */}
+            {result.fanoutQueries && result.fanoutQueries.length > 0 && (
+              <div className="pt-2 space-y-2">
+                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  {t.prompts_fanout_title} (Fan-out Subqueries)
                 </div>
-
-                {/* Diagnosis Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="bg-indigo-900/40 p-4 rounded-2xl border border-indigo-400/30 space-y-1.5">
-                    <div className="font-bold text-indigo-200 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      ① AI認知・ポジショニング評価
-                    </div>
-                    <p className="text-slate-200 leading-relaxed">
-                      {adviceData.overallDiagnosis}
-                    </p>
-                  </div>
-
-                  <div className="bg-indigo-900/40 p-4 rounded-2xl border border-indigo-400/30 space-y-1.5">
-                    <div className="font-bold text-indigo-200 flex items-center gap-1.5">
-                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                      ② 参照リンク（自社URL）獲得戦略
-                    </div>
-                    <p className="text-slate-200 leading-relaxed">
-                      {adviceData.citationStrategy}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4 Action Pillars */}
-                <div className="space-y-3 pt-2">
-                  <div className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
-                    📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {adviceData.actionPillars.map((pillar: any, idx: number) => (
-                      <div key={idx} className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
-                        <div className="font-bold text-white text-xs flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span>{pillar.title}</span>
-                        </div>
-                        <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
-                          {pillar.desc}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {result.fanoutQueries.map((q: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-medium flex items-center gap-1"
+                    >
+                      <span>🔍</span> {q}
+                    </span>
+                  ))}
                 </div>
               </div>
-            );
-          })()}
+            )}
+          </div>
+
+          {/* 4 Action Pillars Card (LLMO/AIO対策の4大コンサルティング・アクションプラン) */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-500/30 space-y-6 relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-indigo-500/30 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
+                  <Sparkles className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                    GEO / LLMO 対策処方箋
+                  </span>
+                  <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
+                    📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
+                  </h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
+                <div className="font-bold text-white text-xs flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+                  <span>1. AI「おすすめソリューション・パートナー枠」での自社名露出対策</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                  AI回答内の「おすすめ支援会社一覧」等の推薦セクションで自社の社名が直接選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを自社サイトに配置します。
+                </p>
+              </div>
+
+              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
+                <div className="font-bold text-white text-xs flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+                  <span>2. 自社サイト(URL)からの直接参照（Web Card）奪還</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                  他社メディアが独占している参照リンク枠を取り戻すため、見出しのQ&A化と直後の35〜65文字結論（即答文章）を自社ドメイン内に配置します。
+                </p>
+              </div>
+
+              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
+                <div className="font-bold text-white text-xs flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+                  <span>3. 一次情報構造＆基本SEO（JSON-LD構造化データ）の徹底</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                  自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが自社の専門性を正しく解析できるセマンティックHTML（H2/H3）を徹底します。
+                </p>
+              </div>
+
+              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
+                <div className="font-bold text-white text-xs flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
+                  <span>4. 比較サイト・外部メディアへのサイテーション露出拡大</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                  AIは第三者メディアの言及も重視します。無料掲載できる業界比較DB、PR TIMES、NewsPicks等への出稿努力を行い、外部での自社言及（サイテーション）を獲得します。
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* AI Response Text Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
