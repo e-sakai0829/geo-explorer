@@ -114,14 +114,27 @@ Format the output in clean, valid Markdown with an engaging H1 title.
 `;
 
     // 4. AIによる記事生成
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.7,
-      },
-    });
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.7,
+        },
+      });
+    } catch (modelError) {
+      console.warn("Primary model gemini-3.6-flash failed, retrying with gemini-2.0-flash...", modelError);
+      response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: `Generate an authoritative AEO article for target topic: "${prompt}" focusing on brand "${brandName}".`,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.7,
+        },
+      });
+    }
 
     const markdown = response.text || "";
 

@@ -77,15 +77,28 @@ export async function POST(req: NextRequest) {
       scanPrompt = `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`;
     }
 
-    // Gemini 1.5 Flash + Google Search Grounding によるリアルタイムスキャン
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: scanPrompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.2,
-      },
-    });
+    // Gemini 3.6 Flash (Grounding対応モデル) によるリアルタイムスキャン
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: scanPrompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          temperature: 0.2,
+        },
+      });
+    } catch (modelError) {
+      console.warn("Primary model gemini-3.6-flash failed, retrying with gemini-2.0-flash...", modelError);
+      response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: scanPrompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          temperature: 0.2,
+        },
+      });
+    }
 
     const candidate = response.candidates?.[0];
     const text = candidate?.content?.parts?.[0]?.text || "";
