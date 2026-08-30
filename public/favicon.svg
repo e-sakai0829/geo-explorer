@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3730a3" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#4f46e5" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1e1b4b" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Base Rounded Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  
+  <!-- Subtle Border Highlight -->
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="4" />
+
+  <!-- Ambient Glow Behind Sparkle -->
+  <circle cx="256" cy="256" r="160" fill="url(#glow)" />
+
+  <!-- Center Main AI Sparkle -->
+  <path d="M 256 112 Q 256 256 112 256 Q 256 256 256 400 Q 256 256 400 256 Q 256 256 256 112 Z" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Top-Right Sub Sparkle -->
+  <path d="M 368 116 Q 368 168 316 168 Q 368 168 368 220 Q 368 168 420 168 Q 368 168 368 116 Z" fill="#e0e7ff"/>
+
+  <!-- Bottom-Left Accent Dot -->
+  <circle cx="150" cy="362" r="14" fill="#c7d2fe" opacity="0.9"/>
+</svg>
