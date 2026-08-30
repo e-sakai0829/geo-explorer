@@ -369,12 +369,9 @@ function PromptsContent() {
                     rel="noopener noreferrer"
                     className="p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-200 rounded-xl transition-all flex items-start justify-between group"
                   >
-                    <div className="space-y-1">
-                      <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 line-clamp-1">
+                    <div className="space-y-1 min-w-0 pr-2">
+                      <div className="font-bold text-xs text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
                         {src.title}
-                      </div>
-                      <div className="text-[11px] text-slate-400 font-mono line-clamp-1">
-                        {src.url}
                       </div>
                     </div>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 shrink-0 mt-0.5 ml-2" />

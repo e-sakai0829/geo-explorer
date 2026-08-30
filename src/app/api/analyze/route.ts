@@ -190,6 +190,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 5. GEO専門コンサルタントによる自動診断＆対策アドバイスの構築
+    const consultantAdvice = {
+      overallDiagnosis: brandMentioned 
+        ? `ブランド「${brandName}」はAIのナレッジ空間で正しく認知・推薦されており、検索ニーズとのポジショニングは良好です。` 
+        : `ブランド「${brandName}」はAI回答内で十分認知されていません。「${prompt}」に関連する自社の強みをAIに学ばせるコンテンツ強化が必要です。`,
+      citationStrategy: brandCited
+        ? `【良好】公式ドメインが直接参照元（Web Card）として獲得できています。現在のAEO構造を維持・拡張してください。`
+        : `【要対策】AI回答内でブランドが言及されているものの、参照元Webカードは他社メディア（ニュース・比較サイト等）が占有しています。自社サイト内に「AIが直答として抽出できる構造化コンテンツ」を掲載し、引用枠を奪還してください。`,
+      actionPillars: [
+        {
+          title: "1. 一次情報構造＆基本SEOの徹底",
+          desc: "自社サイトに「JSON-LD構造化データ (Organization, FAQPage)」を導入し、AIクローラーが自社の専門性を正しく解析できるセマンティックHTML（H2/H3）を徹底します。"
+        },
+        {
+          title: "2. 比較サイト・外部メディアへのサイテーション露出",
+          desc: "AIは自社サイトだけでなく第三者メディアの言及を重視します。業界比較サイト（無料掲載含む）、PR TIMES、NewsPicks等への出稿努力を行い、外部露出（サイテーション）を増やします。"
+        },
+        {
+          title: "3. AEO直答（Direct Answer）Q&Aフォーマットの導入",
+          desc: "コンテンツの見出しを「Q. 〜とは？」等の自然言語の問い形式にし、その直下に「35〜65文字の結論・定義（即答）」を配置してAI Overviewsへの直接引用率を最大化します。"
+        },
+        {
+          title: "4. 構造化テーブル（表）による比較データの提示",
+          desc: "サービスの特徴・価格・強みを段落文章だけでなく「1行HTML/Markdownテーブル（表）」として整理し、AIが機械的に比較カード化しやすい構造にします。"
+        }
+      ]
+    };
+
     return NextResponse.json({
       prompt,
       brandName,
@@ -200,6 +228,7 @@ export async function POST(req: NextRequest) {
       citationSources: webSources,
       competitorMentions,
       creditsRemaining,
+      consultantAdvice,
     });
   } catch (error: any) {
     console.error("Analysis API Error:", error);
