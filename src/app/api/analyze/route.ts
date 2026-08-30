@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
     let orgId: string | null = null;
     let creditsRemaining = 10;
 
+    let orgObj: any = null;
+
     // ユーザーの組織情報を取得
     const { data: org } = await supabase
       .from("organizations")
@@ -29,13 +31,9 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (org) {
-      orgId = org.id;
-      // アトミックなクレジット消費チェック
-      const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
-
-      if (rpcError) {
-        console.error("consume_credit RPC error:", rpcError);
-      } else if (!creditConsumed) {
+      orgObj = org;
+      // 事前のクレジット上限チェック（消費はまだ行わない）
+      if (org.used_credits >= org.monthly_credits) {
         return NextResponse.json(
           { 
             error: "今月の調査クレジット上限に達しました。プランをアップグレードしてください。",
@@ -46,7 +44,6 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
-      creditsRemaining = Math.max(0, org.monthly_credits - (org.used_credits + 1));
     }
 
     const { 
@@ -134,13 +131,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5. ログイン時のみDBへ記録保存
-    if (orgId) {
+    // 5. AIスキャン成功後のみ、アトミックにクレジットを消費してログ記録
+    if (orgObj) {
+      orgId = orgObj.id;
+      const { data: creditConsumed } = await supabase.rpc("consume_credit", { org_id: orgObj.id });
+      creditsRemaining = Math.max(0, orgObj.monthly_credits - (orgObj.used_credits + 1));
+
       let projectId = "";
       const { data: project } = await supabase
         .from("projects")
         .select("id")
-        .eq("organization_id", orgId)
+        .eq("organization_id", orgObj.id)
         .limit(1)
         .single();
 
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
         const { data: newProj } = await supabase
           .from("projects")
           .insert({
-            organization_id: orgId,
+            organization_id: orgObj.id,
             name: brandName,
             domain: "https://example.com",
             competitors: competitors,

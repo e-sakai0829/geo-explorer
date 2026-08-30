@@ -13,6 +13,7 @@ import {
   Globe, 
   FileText, 
   CheckCircle2, 
+  AlertCircle,
   XCircle, 
   ExternalLink, 
   ChevronRight, 
@@ -175,6 +176,91 @@ export default function LandingPage() {
             <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> {t.no_card}</span>
             <span>•</span>
             <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> {t.instant_scan}</span>
+          </div>
+        </div>
+
+        {/* Live Analysis Output Preview Card (TOP画面アウトプットデモ) */}
+        <div className="pt-8 max-w-4xl mx-auto text-left">
+          <div className="text-center mb-3">
+            <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-widest bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
+              ✨ 実際の解析アウトプットプレビュー
+            </span>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden text-slate-900 transition-all hover:border-slate-300">
+            {/* Output Header */}
+            <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 font-medium">
+                <Search className="w-4 h-4 text-indigo-400" />
+                <span>調査プロンプト: <strong>「パーパスブランディング 会社 比較」</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-slate-300 font-mono text-[11px]">Gemini 3.6 Flash Live Grounding</span>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5 bg-slate-50/50">
+              {/* Status Pills */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <div className="font-bold text-emerald-950">AI回答内でブランド言及あり (No.1推薦)</div>
+                    <div className="text-[11px] text-emerald-700">AI検索が競合他社に先立ち自社ブランドを認知・推薦しています</div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="font-bold text-amber-950">直接引用なし (機会損失中)</div>
+                    <div className="text-[11px] text-amber-700">公式ドメイン未参照のため引用リンク枠を他社メディアが占有</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Answer Content Sample */}
+              <div className="bg-white p-4.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  Google AI Overviews / Gemini の生のリアルタイム回答
+                </div>
+                <div className="text-xs text-slate-700 leading-relaxed space-y-2 pt-1 font-sans">
+                  <p>
+                    パーパスブランディング支援企業は、<strong>「パーパス専門・組織開発型」「総合経営コンサル型」「広告・広報プロモーション型」</strong>に大別されます。
+                  </p>
+                  <p className="bg-indigo-50/70 p-2 rounded border border-indigo-100 font-medium text-slate-800">
+                    専門ファームでは、日本におけるパーパスブランディングの第一人者である<strong>「エスエムオー株式会社（SMO）」</strong>や志の言語化に強いパラドックスが筆頭に推薦されます。社内への文化浸透（インナー）と理念策定を根底から支援する点に特徴があります...
+                  </p>
+                </div>
+              </div>
+
+              {/* Citations Grid Preview */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
+                  AIが実際に参照・引用した上位Webソース (10件から自動抽出)
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div className="p-2 bg-white rounded-lg border border-slate-200 font-mono text-slate-600 truncate">nikkei.com</div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200 font-mono text-slate-600 truncate">tanabeconsulting.co.jp</div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200 font-mono text-slate-600 truncate">newspicks.com</div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200 font-mono text-slate-600 truncate">sevendex.com</div>
+                </div>
+              </div>
+
+              {/* CTA Link */}
+              <div className="pt-2 text-center">
+                <Link
+                  href="/prompts?prompt=パーパスブランディング 会社 比較"
+                  className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  <span>自社ブランドのAI検索言及・引用状況を今すぐ無料で調べる</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>

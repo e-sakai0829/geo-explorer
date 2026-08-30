@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. 組織情報の取得
+    // 2. 組織情報の取得と事前のクレジット上限チェック（消費はまだ行わない）
     const { data: org, error: orgError } = await supabase
       .from("organizations")
       .select("id, plan, monthly_credits, used_credits")
@@ -29,18 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. アトミックなクレジット消費チェック (Fail-closed & 所有者検証)
-    const { data: creditConsumed, error: rpcError } = await supabase.rpc("consume_credit", { org_id: org.id });
-
-    if (rpcError) {
-      console.error("consume_credit RPC error in generate-article:", rpcError);
-      return NextResponse.json(
-        { error: "クレジット処理エラーが発生しました。" },
-        { status: 500 }
-      );
-    }
-
-    if (!creditConsumed) {
+    if (org.used_credits >= org.monthly_credits) {
       return NextResponse.json(
         { 
           error: "今月の記事生成クレジット上限に達しました。プランをアップグレードしてください。",
@@ -138,7 +127,8 @@ Format the output in clean, valid Markdown with an engaging H1 title.
 
     const markdown = response.text || "";
 
-    // 5. プロジェクトの取得または作成
+    // 5. AI生成成功後のみ、アトミックにクレジットを消費
+    await supabase.rpc("consume_credit", { org_id: org.id });
     const { data: project } = await supabase
       .from("projects")
       .select("id")
