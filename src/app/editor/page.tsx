@@ -32,6 +32,42 @@ function EditorInner() {
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [articleLogs, setArticleLogs] = useState<any[]>([]);
+
+  // 過去の生成記事一覧を取得
+  const fetchArticleLogs = () => {
+    fetch("/api/user/articles")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.articles) setArticleLogs(data.articles);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchArticleLogs();
+  }, []);
+
+  // 履歴からの復元表示
+  const handleRestoreArticle = (art: any) => {
+    setPrompt(art.prompt || art.title);
+    setArticle(art.contentMarkdown);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // 特定の過去記事をMarkdownとしてダウンロード
+  const handleDownloadSpecificMarkdown = (art: any) => {
+    const blob = new Blob([art.contentMarkdown], { type: "text/markdown;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeTitle = (art.title || art.prompt).replace(/[/\\?%*:|"<>]/g, "_") || "AEO_Article";
+    link.href = url;
+    link.download = `AEO_Article_${safeTitle}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Markdown (.md) ファイルのダウンロード
   const handleDownloadMarkdown = () => {
@@ -107,6 +143,7 @@ function EditorInner() {
       if (!res.ok) throw new Error(data.error || "記事生成に失敗しました。");
 
       setArticle(data.article);
+      fetchArticleLogs();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -332,6 +369,82 @@ function EditorInner() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 過去に生成したAEO記事の保存ログ・履歴一覧テーブル */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4 print:hidden mt-8">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+            <FileText className="w-4 h-4 text-indigo-600" />
+            <span>過去に作成したAEO記事の保存ログ・履歴</span>
+            <span className="text-xs text-slate-400 font-normal">({articleLogs.length}件の保存データ)</span>
+          </div>
+          <span className="text-[11px] text-slate-400">過去の記事をいつでも復元・.md保存・PDF出力できます</span>
+        </div>
+
+        {articleLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <th className="py-3 px-3">作成日時</th>
+                  <th className="py-3 px-3">記事タイトル / ターゲットプロンプト</th>
+                  <th className="py-3 px-3">執筆言語</th>
+                  <th className="py-3 px-3 text-right">操作（ダウンロード・印刷）</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {articleLogs.map((art) => (
+                  <tr key={art.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <td className="py-3 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                      {new Date(art.date).toLocaleDateString("ja-JP")}
+                    </td>
+                    <td className="py-3 px-3 font-bold text-slate-900">
+                      <div className="max-w-md truncate">{art.title}</div>
+                      <div className="text-[10px] text-slate-400 font-normal truncate">KW: {art.prompt}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="inline-flex items-center gap-1 font-bold text-[11px]">
+                        {art.language === "zh-TW" ? "🇹🇼 繁體中文" : art.language === "en" ? "🇺🇸 English" : "🇯🇵 日本語"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => handleRestoreArticle(art)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>👁️ 復元表示</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDownloadSpecificMarkdown(art)}
+                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-lg transition-colors text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <FileDown className="w-3 h-3" />
+                        <span>.md 保存</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleRestoreArticle(art);
+                          setTimeout(() => window.print(), 300);
+                        }}
+                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-[11px] inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                      >
+                        <Printer className="w-3 h-3" />
+                        <span>PDF/印刷</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            まだ過去に作成した記事ログはありません。上のフォームから記事を生成してください。
+          </div>
+        )}
       </div>
     </div>
   );
