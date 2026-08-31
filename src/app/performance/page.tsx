@@ -23,17 +23,110 @@ export default function PerformancePage() {
   const [domain, setDomain] = useState("https://example.com");
   const [hasArticles, setHasArticles] = useState(false);
 
+  const [trackedItems, setTrackedItems] = useState<any[]>([]);
+  const [newPrompt, setNewPrompt] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
+  const [activeReport, setActiveReport] = useState<any | null>(null);
+
   useEffect(() => {
     fetch("/api/user/project")
       .then((res) => res.json())
       .then((data) => {
         if (data?.project) {
-          setBrandName(data.project.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
+          setBrandName(data.project.name || "自社ブランド");
           setDomain(data.project.domain || "https://example.com");
         }
       })
       .catch(() => {});
   }, [lang]);
+
+  // ローカルストレージからの復元
+  useEffect(() => {
+    const saved = localStorage.getItem("geo_performance_tracked");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setTrackedItems(parsed);
+        if (parsed.length > 0) setHasArticles(true);
+      } catch (e) {}
+    }
+  }, []);
+
+  const saveTrackedItems = (items: any[]) => {
+    setTrackedItems(items);
+    setHasArticles(items.length > 0);
+    localStorage.setItem("geo_performance_tracked", JSON.stringify(items));
+  };
+
+  // 公開URLの新規登録
+  const handleRegisterUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPrompt || !newUrl) return;
+
+    const newItem = {
+      id: Date.now().toString(),
+      prompt: newPrompt,
+      url: newUrl,
+      date: new Date().toISOString(),
+      status: "pending",
+      beforeStatus: "未言及・他社メディア占有",
+      afterStatus: "インデックス・AI学習待ち (要再スキャン)",
+      lastScannedAt: null,
+      aiResponse: null,
+      brandMentioned: false,
+      brandCited: false,
+    };
+
+    const updated = [newItem, ...trackedItems];
+    saveTrackedItems(updated);
+    setNewPrompt("");
+    setNewUrl("");
+  };
+
+  // 1クレジットを使って効果測定（再スキャン）を実行
+  const handleRescan = async (item: any) => {
+    setRescanningId(item.id);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: item.prompt,
+          brandName: brandName,
+          competitors: [],
+          targetLocale: "ja",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "再検証スキャンに失敗しました。");
+
+      const updated = trackedItems.map((t) => {
+        if (t.id === item.id) {
+          return {
+            ...t,
+            status: "verified",
+            lastScannedAt: new Date().toISOString(),
+            afterStatus: data.brandCited ? "🟢 自社URL参照を獲得！" : "🟡 言及認知あり (引用奪還へ向けて継続補強)",
+            brandMentioned: data.brandMentioned,
+            brandCited: data.brandCited,
+            aiResponse: data.aiResponse,
+            citationSources: data.citationSources || [],
+          };
+        }
+        return t;
+      });
+
+      saveTrackedItems(updated);
+      const currentVerified = updated.find((t) => t.id === item.id);
+      setActiveReport(currentVerified);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setRescanningId(null);
+    }
+  };
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
@@ -47,77 +140,85 @@ export default function PerformancePage() {
           {t.perf_title}
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          {t.perf_desc}
+          生成・公開した AEO 直答記事が、Google AI Overviews に引用・推薦されるまでの時系列推移を追跡・効果検証します
         </p>
       </div>
 
-      {/* Overview Cards (実データ連動設計) */}
+      {/* 1. 公開済み AEO記事 URL 登録フォーム (新規構築) */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
+            <ExternalLink className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">🔗 公開済み AEO記事（自社URL）の登録</h3>
+            <p className="text-[11px] text-slate-400">自社オウンドメディアやWebサイトに公開した記事のURLを登録して効果測定を開始します</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleRegisterUrl} className="grid grid-cols-1 md:grid-cols-12 gap-3 text-xs">
+          <div className="md:col-span-5 space-y-1">
+            <label className="block font-bold text-slate-700">対策ターゲットKW (プロンプト) <span className="text-rose-500">*</span></label>
+            <input
+              type="text"
+              value={newPrompt}
+              onChange={(e) => setNewPrompt(e.target.value)}
+              placeholder="例: パーパスブランディング 費用 比較"
+              required
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+            />
+          </div>
+
+          <div className="md:col-span-5 space-y-1">
+            <label className="block font-bold text-slate-700">公開した記事の自社URL <span className="text-rose-500">*</span></label>
+            <input
+              type="url"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="https://www.smo-inc.com/purpose-branding-guide"
+              required
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex items-end">
+            <button
+              type="submit"
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+            >
+              <span>URLを登録</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 2. Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="text-xs font-semibold text-slate-500">{t.perf_published}</div>
+          <div className="text-xs font-semibold text-slate-500">公開・トラッキング中記事</div>
           <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {hasArticles ? "1" : "0"} <span className="text-xs font-normal text-slate-400">{lang === "zh-TW" ? "篇" : lang === "en" ? "Articles" : "本"}</span>
+            {trackedItems.length} <span className="text-xs font-normal text-slate-400">本</span>
           </div>
           <div className="text-[11px] text-slate-400">
-            {hasArticles 
-              ? (lang === "zh-TW" ? "已建立索引" : lang === "en" ? "Indexed" : "インデックス済み")
-              : (lang === "zh-TW" ? "發布專文後將自動累計" : lang === "en" ? "Auto-tracked upon publishing" : "記事を公開すると自動集計されます")}
+            {trackedItems.length > 0 ? "自社ドメインの公開記事を監視中" : "記事URLを登録すると自動集計されます"}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="text-xs font-semibold text-slate-500">{t.perf_citation_rate}</div>
+          <div className="text-xs font-semibold text-slate-500">AI Overviews 引用獲得率</div>
           <div className="text-3xl font-black text-indigo-600 tracking-tight">
-            {hasArticles ? "100%" : "—"}
+            {trackedItems.length > 0 
+              ? `${Math.round((trackedItems.filter((t) => t.brandCited).length / trackedItems.length) * 100)}%` 
+              : "—"}
           </div>
           <div className="text-[11px] text-slate-400">
-            {hasArticles 
-              ? (lang === "zh-TW" ? "施策前 0% ➔ 施策後 100%" : lang === "en" ? "Before 0% ➔ After 100%" : "施策前 0% ➔ 施策後 100%")
-              : (lang === "zh-TW" ? "文章發布後將開始追蹤掃描" : lang === "en" ? "Tracking begins after publishing" : "記事公開後に追跡スキャンが開始されます")}
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="text-xs font-semibold text-slate-500">{t.perf_days}</div>
-          <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {hasArticles ? "14" : "—"} <span className="text-xs font-normal text-slate-400">{hasArticles ? (lang === "zh-TW" ? "天" : lang === "en" ? "Days" : "日") : ""}</span>
-          </div>
-          <div className="text-[11px] text-slate-400">
-            {lang === "zh-TW" ? "從專文發布至獲得 AIO 引用" : lang === "en" ? "From AEO published to AIO citation" : "AEO 記事公開から AIO ソース採用まで"}
+            {trackedItems.length > 0 
+              ? `獲得件数: ${trackedItems.filter((t) => t.brandCited).length} / ${trackedItems.length} 本` 
+              : "URL登録後に追跡スキャンが有効化されます"}
           </div>
         </div>
       </div>
-
-      {/* Empty State / Tracker Action */}
-      {!hasArticles ? (
-        <div className="bg-white p-10 rounded-3xl border border-slate-200/80 shadow-xs text-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
-            <TrendingUp className="w-7 h-7" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900">
-              {t.perf_empty_title}
-            </h2>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              {lang === "zh-TW"
-                ? `使用 AEO 編輯器產出專文並發布於自社網站（${domain}）後，於 Prompt Explorer 再次執行掃描，系統將在此自動累積時序成效報告。`
-                : lang === "en"
-                ? `Generate an AEO article, publish it to your website (${domain}), and re-scan in Prompt Explorer to automatically build your timeline Before/After report.`
-                : `AEO エディタで記事を生成し、自社サイト（${domain}）に公開した後、Prompt Explorer で再スキャンを実行すると、ここに時系列の Before / After レポートが自動蓄積されます。`}
-            </p>
-          </div>
-
-          <div className="pt-2 flex justify-center gap-3">
-            <Link
-              href="/editor"
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4" />
-              {t.perf_empty_cta}
-            </Link>
-          </div>
-        </div>
-      ) : null}
 
       {/* Demo Case Preview Guide (参考事例) */}
       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/80 space-y-3">
