@@ -302,45 +302,45 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* ① & ② GEO Expert Diagnosis Cards */}
+          {/* ① & ② GEO Expert Diagnosis Cards (明るく見やすいライトトーンデザイン) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-2">
+            <div className="bg-emerald-50/70 text-slate-900 p-5 rounded-2xl border border-emerald-200/90 shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-widest bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
                   ① AI認知・ポジショニング評価
                 </span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               </div>
-              <h4 className="text-xs font-bold text-emerald-300">
+              <h4 className="text-xs font-bold text-emerald-950">
                 狙いたいKWの認知・方向性は間違っていません
               </h4>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
+              <p className="text-[11px] text-slate-700 leading-relaxed">
                 {result.brandMentioned
                   ? `AIのナレッジ空間で「${result.brandName}」が主要な関連キーワードとして正しく認知・露出されています。`
                   : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。「${result.prompt}」に関連する自社の強みをAIに学ばせるコンテンツ強化が必要です。`}
               </p>
             </div>
 
-            <div className="bg-slate-900 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-2">
+            <div className="bg-amber-50/70 text-slate-900 p-5 rounded-2xl border border-amber-200/90 shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-widest bg-amber-100/90 px-2.5 py-0.5 rounded-full border border-amber-200/80">
                   ② 参照リンク（自社URL）獲得戦略
                 </span>
-                <AlertCircle className="w-4 h-4 text-amber-400" />
+                <AlertCircle className="w-4 h-4 text-amber-600" />
               </div>
-              <h4 className="text-xs font-bold text-amber-300">
+              <h4 className="text-xs font-bold text-amber-950">
                 自社サイトからは参照されていません (要対策)
               </h4>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
+              <p className="text-[11px] text-slate-700 leading-relaxed">
                 {result.brandCited
                   ? `【良好】公式ドメインが直接参照元（Web Card）として獲得できています。`
                   : `参照元Webカードは他社メディアが占有しています。自社サイト内に「AIが直答として抽出できる構造化コンテンツ」を掲載し引用枠を奪還してください。`}
               </p>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100 px-2.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-widest bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200/60">
                   ③ 競合シェアシフト
                 </span>
               </div>
@@ -348,8 +348,8 @@ function PromptsContent() {
                 {Object.keys(result.competitorMentions || {}).length > 0 ? (
                   Object.entries(result.competitorMentions).map(([comp, mentioned]) => (
                     <div key={comp} className="flex justify-between items-center text-xs">
-                      <span className="font-medium text-slate-700 truncate pr-2">{comp}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${mentioned ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
+                      <span className="font-medium text-slate-800 truncate pr-2">{comp}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${mentioned ? "bg-rose-100 text-rose-700 border border-rose-200" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>
                         {mentioned ? "言及あり" : "言及なし"}
                       </span>
                     </div>
@@ -361,18 +361,18 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* 4 Action Pillars Card */}
-          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-500/30 space-y-6 relative overflow-hidden">
-            <div className="flex items-center justify-between border-b border-indigo-500/30 pb-4">
+          {/* 4 Action Pillars Card (清潔感溢れる淡色インディゴグラデーションデザイン) */}
+          <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-purple-50/60 rounded-3xl p-6 sm:p-8 text-slate-900 shadow-sm border border-indigo-200/80 space-y-6 relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-indigo-200/60 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
-                  <Sparkles className="w-5 h-5 text-indigo-300" />
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                  <span className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-widest bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200/80">
                     GEO / LLMO 対策処方箋
                   </span>
-                  <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
+                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight mt-0.5">
                     📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
                   </h3>
                 </div>
@@ -380,42 +380,42 @@ function PromptsContent() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
-                <div className="font-bold text-white text-xs flex items-center gap-2">
+              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
+                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
                   <span>1. AI「おすすめソリューション・パートナー枠」対策</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
                   推薦セクションで自社の社名が選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを配置します。
                 </p>
               </div>
 
-              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
-                <div className="font-bold text-white text-xs flex items-center gap-2">
+              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
+                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
                   <span>2. 自社サイト(URL)からの直接参照（Web Card）奪還</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
                   他社メディアが独占している参照枠を取り戻すため、見出しのQ&A化と直後の結論（即答文章）をドメイン内に配置します。
                 </p>
               </div>
 
-              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
-                <div className="font-bold text-white text-xs flex items-center gap-2">
+              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
+                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
                   <span>3. JSON-LD構造化データによるセマンティック強化</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
                   自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが専門性を正しく解析できる構造を徹底します。
                 </p>
               </div>
 
-              <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
-                <div className="font-bold text-white text-xs flex items-center gap-2">
+              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
+                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
                   <span>4. 外部サイテーション露出の最大化</span>
                 </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
+                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
                   業界比較DB、PR TIMES等への出稿により、AIが重要視する外部メディアからの言及（サイテーション）を獲得します。
                 </p>
               </div>
