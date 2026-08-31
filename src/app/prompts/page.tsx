@@ -38,6 +38,39 @@ function PromptsContent() {
   const [targetLocale, setTargetLocale] = useState<"ja" | "zh-TW" | "en">(lang);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+
+  // 過去スキャン履歴の取得
+  const fetchHistoryLogs = () => {
+    fetch("/api/user/logs")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.logs) setHistoryLogs(data.logs);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchHistoryLogs();
+  }, []);
+
+  // 履歴からの結果復元
+  const handleRestoreLog = (log: any) => {
+    setPrompt(log.prompt);
+    setResult({
+      prompt: log.prompt,
+      brandName: brandName,
+      brandMentioned: log.brandMentioned,
+      brandCited: log.brandCited,
+      aiResponse: log.rawResponse,
+      fanoutQueries: log.fanoutQueries || [],
+      citationSources: log.citationSources || [],
+      competitorMentions: {},
+      creditsRemaining: 10,
+    });
+    // スクロール移動
+    window.scrollTo({ top: 400, behavior: "smooth" });
+  };
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
@@ -111,6 +144,7 @@ function PromptsContent() {
       }
 
       setResult(data);
+      fetchHistoryLogs();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -120,42 +154,53 @@ function PromptsContent() {
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
-          <Search className="w-3.5 h-3.5" />
-          GEO Prompt Explorer
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          {t.prompts_title}
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          {t.prompts_desc}
-        </p>
-
-        {!user && (
-          <div className="mt-4 p-3.5 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5 text-indigo-950 font-medium">
-              <span className="p-1 bg-indigo-600 text-white rounded-md shrink-0">
-                <Gift className="w-3.5 h-3.5" />
-              </span>
-              <span>
-                <strong>無料アカウント登録（カード不要）</strong>で、毎月10回のAI検索リアルタイムスキャンが無料でご利用いただけます。
-              </span>
-            </div>
-            <Link
-              href={`/login?redirect=prompts${prompt ? `&prompt=${encodeURIComponent(prompt)}` : ""}`}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 text-xs shadow-2xs"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              無料登録 / ログイン
-            </Link>
+      {/* Header with Permanent PDF Export Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
+            <Search className="w-3.5 h-3.5" />
+            GEO Prompt Explorer
           </div>
-        )}
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {t.prompts_title}
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            {t.prompts_desc}
+          </p>
+        </div>
+
+        {/* 画面右上：常時アクセスできる PDF / 印刷出力ボタン */}
+        <button
+          onClick={handlePrintReport}
+          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer print:hidden"
+        >
+          <FileDown className="w-4 h-4 text-indigo-400" />
+          <span>📄 PDF / 印刷レポートを出力</span>
+        </button>
       </div>
 
+      {!user && (
+        <div className="p-3.5 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-indigo-950 font-medium">
+            <span className="p-1 bg-indigo-600 text-white rounded-md shrink-0">
+              <Gift className="w-3.5 h-3.5" />
+            </span>
+            <span>
+              <strong>無料アカウント登録（カード不要）</strong>で、毎月10回のAI検索リアルタイムスキャンが無料でご利用いただけます。
+            </span>
+          </div>
+          <Link
+            href={`/login?redirect=prompts${prompt ? `&prompt=${encodeURIComponent(prompt)}` : ""}`}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 text-xs shadow-2xs"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            無料登録 / ログイン
+          </Link>
+        </div>
+      )}
+
       {/* Search Input Box */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4 print:hidden">
         <form onSubmit={handleAnalyze} className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <label className="block text-xs font-bold text-slate-700">
@@ -220,17 +265,6 @@ function PromptsContent() {
               <span>解析エラー</span>
             </div>
             <p className="pl-6 text-rose-700 leading-relaxed">{error}</p>
-            {error.includes("ログイン") && (
-              <div className="pl-6 pt-1">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 text-white font-bold rounded-lg text-xs hover:bg-rose-700 transition-colors shadow-2xs"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  ログイン画面へ移動する
-                </Link>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -251,27 +285,6 @@ function PromptsContent() {
       {/* Analysis Result Display */}
       {result && (
         <div className="space-y-6">
-          {/* PDF / Print Action Header (画面表示用ボタン) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 text-white p-5 rounded-2xl shadow-sm border border-slate-800 print:hidden">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
-                <Printer className="w-5 h-5 text-indigo-300" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">📄 クライアント提出用 GEO/LLMO 診断レポート</h3>
-                <p className="text-[11px] text-slate-300 mt-0.5">現在の解析結果・診断評価・アクションプランをPDFとして出力・保存できます</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handlePrintReport}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-            >
-              <FileDown className="w-4 h-4" />
-              <span>PDF / 印刷レポートを出力する</span>
-            </button>
-          </div>
-
           {/* Printable Header (印刷・PDF出力時のみ紙面トップに表示) */}
           <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
             <div className="flex justify-between items-end">
@@ -289,75 +302,8 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* Status Overview Card */}
+          {/* ① & ② GEO Expert Diagnosis Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`p-5 rounded-2xl border ${result.brandMentioned ? "bg-emerald-50/60 border-emerald-200" : "bg-rose-50/60 border-rose-200"}`}>
-              <div className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                ターゲットKWのAI認知状況
-              </div>
-              <div className="flex items-center gap-2">
-                {result.brandMentioned ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span className="text-base font-black text-emerald-950">狙いたいKWは間違っていません</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-                    <span className="text-base font-black text-rose-900">AI未認知 (KW強化が必要)</span>
-                  </>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-                AI検索の回答文内に「{result.brandName}」が主要な関連キーワードとして正しく認識・露出されています
-              </p>
-            </div>
-
-            <div className={`p-5 rounded-2xl border ${result.brandCited ? "bg-emerald-50/60 border-emerald-200" : "bg-amber-50/60 border-amber-200"}`}>
-              <div className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                自社URLの直接参照状況
-              </div>
-              <div className="flex items-center gap-2">
-                {result.brandCited ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span className="text-base font-black text-emerald-950">自社サイトから直接参照されています</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                    <span className="text-base font-black text-amber-900">自社サイトからは参照されていません (要対策)</span>
-                  </>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-                AIが回答の信頼参照元（Web Card）として自社サイトURLを提示できておらず、他社メディアに流入を奪われています
-              </p>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-slate-200 bg-white">
-              <div className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
-                競合シェアシフト
-              </div>
-              <div className="space-y-1">
-                {Object.keys(result.competitorMentions || {}).length > 0 ? (
-                  Object.entries(result.competitorMentions).map(([comp, mentioned]) => (
-                    <div key={comp} className="flex justify-between items-center text-xs">
-                      <span className="font-semibold text-slate-700">{comp}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${mentioned ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
-                        {mentioned ? "言及あり" : "言及なし"}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-slate-400 pt-1">追跡中の競合なし</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ① & ② GEO Expert Diagnosis Cards (AI認知評価 ＆ 自社URL参照戦略 - Gemini回答のすぐ上に配置) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-slate-900 text-white p-5 rounded-2xl border border-indigo-500/30 shadow-md space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
@@ -365,12 +311,12 @@ function PromptsContent() {
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               </div>
-              <h4 className="text-sm font-bold text-emerald-300">
-                狙いたいキーワード（KW）の認知・方向性は間違っていません
+              <h4 className="text-xs font-bold text-emerald-300">
+                狙いたいKWの認知・方向性は間違っていません
               </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-[11px] text-slate-300 leading-relaxed">
                 {result.brandMentioned
-                  ? `AIのナレッジ空間で「${result.brandName}」が主要な関連キーワードとして正しく認知・露出されており、検索ニーズとのポジショニングは良好です。`
+                  ? `AIのナレッジ空間で「${result.brandName}」が主要な関連キーワードとして正しく認知・露出されています。`
                   : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。「${result.prompt}」に関連する自社の強みをAIに学ばせるコンテンツ強化が必要です。`}
               </p>
             </div>
@@ -382,55 +328,40 @@ function PromptsContent() {
                 </span>
                 <AlertCircle className="w-4 h-4 text-amber-400" />
               </div>
-              <h4 className="text-sm font-bold text-amber-300">
-                自社サイト（URL）からは参照されていません（要対策）
+              <h4 className="text-xs font-bold text-amber-300">
+                自社サイトからは参照されていません (要対策)
               </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-[11px] text-slate-300 leading-relaxed">
                 {result.brandCited
-                  ? `【良好】公式ドメインが直接参照元（Web Card）として獲得できています。現在のAEO構造を維持・拡張してください。`
-                  : `AI回答内でブランドが言及されているものの、参照元Webカードは他社メディア（ニュース・比較サイト等）が占有しています。自社サイト内に「AIが直答として抽出できる構造化コンテンツ」を掲載し、引用枠を奪還してください。`}
+                  ? `【良好】公式ドメインが直接参照元（Web Card）として獲得できています。`
+                  : `参照元Webカードは他社メディアが占有しています。自社サイト内に「AIが直答として抽出できる構造化コンテンツ」を掲載し引用枠を奪還してください。`}
               </p>
             </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100 px-2.5 py-0.5 rounded-full">
+                  ③ 競合シェアシフト
+                </span>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                {Object.keys(result.competitorMentions || {}).length > 0 ? (
+                  Object.entries(result.competitorMentions).map(([comp, mentioned]) => (
+                    <div key={comp} className="flex justify-between items-center text-xs">
+                      <span className="font-medium text-slate-700 truncate pr-2">{comp}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${mentioned ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
+                        {mentioned ? "言及あり" : "言及なし"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-400 pt-1">追跡中の競合なし</div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* AI Response Text Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                Google AI Overviews / Gemini リアルタイムスキャン回答
-              </div>
-              <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-2 py-0.5 rounded border border-slate-200">
-                Search Grounded Response
-              </span>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-              {result.aiResponse}
-            </div>
-
-            {/* Fanout Sub-queries */}
-            {result.fanoutQueries && result.fanoutQueries.length > 0 && (
-              <div className="pt-2 space-y-2">
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                  {t.prompts_fanout_title} (Fan-out Subqueries)
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {result.fanoutQueries.map((q: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-medium flex items-center gap-1"
-                    >
-                      <span>🔍</span> {q}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 4 Action Pillars Card (LLMO/AIO対策の4大コンサルティング・アクションプラン) */}
+          {/* 4 Action Pillars Card */}
           <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-500/30 space-y-6 relative overflow-hidden">
             <div className="flex items-center justify-between border-b border-indigo-500/30 pb-4">
               <div className="flex items-center gap-3">
@@ -452,10 +383,10 @@ function PromptsContent() {
               <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
                 <div className="font-bold text-white text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
-                  <span>1. AI「おすすめソリューション・パートナー枠」での自社名露出対策</span>
+                  <span>1. AI「おすすめソリューション・パートナー枠」対策</span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
-                  AI回答内の「おすすめ支援会社一覧」等の推薦セクションで自社の社名が直接選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを自社サイトに配置します。
+                  推薦セクションで自社の社名が選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを配置します。
                 </p>
               </div>
 
@@ -465,27 +396,27 @@ function PromptsContent() {
                   <span>2. 自社サイト(URL)からの直接参照（Web Card）奪還</span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
-                  他社メディアが独占している参照リンク枠を取り戻すため、見出しのQ&A化と直後の35〜65文字結論（即答文章）を自社ドメイン内に配置します。
+                  他社メディアが独占している参照枠を取り戻すため、見出しのQ&A化と直後の結論（即答文章）をドメイン内に配置します。
                 </p>
               </div>
 
               <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
                 <div className="font-bold text-white text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
-                  <span>3. 一次情報構造＆基本SEO（JSON-LD構造化データ）の徹底</span>
+                  <span>3. JSON-LD構造化データによるセマンティック強化</span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
-                  自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが自社の専門性を正しく解析できるセマンティックHTML（H2/H3）を徹底します。
+                  自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが専門性を正しく解析できる構造を徹底します。
                 </p>
               </div>
 
               <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-1.5">
                 <div className="font-bold text-white text-xs flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
-                  <span>4. 比較サイト・外部メディアへのサイテーション露出拡大</span>
+                  <span>4. 外部サイテーション露出の最大化</span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed pl-7">
-                  AIは第三者メディアの言及も重視します。無料掲載できる業界比較DB、PR TIMES、NewsPicks等への出稿努力を行い、外部での自社言及（サイテーション）を獲得します。
+                  業界比較DB、PR TIMES等への出稿により、AIが重要視する外部メディアからの言及（サイテーション）を獲得します。
                 </p>
               </div>
             </div>
@@ -528,10 +459,10 @@ function PromptsContent() {
             )}
           </div>
 
-          {/* Web Citation Sources */}
+          {/* Citation Sources Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
                 <ExternalLink className="w-4 h-4 text-indigo-600" />
                 {t.prompts_sources_title} ({result.citationSources?.length || 0}件)
               </div>
@@ -551,6 +482,9 @@ function PromptsContent() {
                     <div className="space-y-1 min-w-0 pr-2">
                       <div className="font-bold text-xs text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
                         {src.title}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate font-mono">
+                        {src.url}
                       </div>
                     </div>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 shrink-0 mt-0.5 ml-2" />
@@ -592,6 +526,80 @@ function PromptsContent() {
           </div>
         </div>
       )}
+
+      {/* ミエルカ風：過去の調査・スキャン履歴一覧テーブル (④の実装) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4 print:hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+            <Search className="w-4 h-4 text-indigo-600" />
+            <span>過去の調査・スキャン履歴ログ</span>
+            <span className="text-xs text-slate-400 font-normal">({historyLogs.length}件の記録)</span>
+          </div>
+          <span className="text-[11px] text-slate-400">過去のスキャン結果をいつでも再確認・PDF出力できます</span>
+        </div>
+
+        {historyLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <th className="py-3 px-3">取得日時</th>
+                  <th className="py-3 px-3">調査キーワード（プロンプト）</th>
+                  <th className="py-3 px-3">AI認知状況</th>
+                  <th className="py-3 px-3">自社URL参照</th>
+                  <th className="py-3 px-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {historyLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <td className="py-3 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                      {new Date(log.date).toLocaleDateString("ja-JP")}
+                    </td>
+                    <td className="py-3 px-3 font-bold text-slate-900">
+                      {log.prompt}
+                    </td>
+                    <td className="py-3 px-3">
+                      {log.brandMentioned ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> 認知あり
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                          <AlertCircle className="w-3 h-3 text-rose-600" /> AI未認知
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3">
+                      {log.brandCited ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> 参照獲得
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
+                          <AlertCircle className="w-3 h-3 text-amber-600" /> 要対策
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => handleRestoreLog(log)}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors text-xs inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>👁️ 結果を表示</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            まだ過去の調査履歴はありません。キーワードを入力してスキャンを実行してください。
+          </div>
+        )}
+      </div>
     </div>
   );
 }
