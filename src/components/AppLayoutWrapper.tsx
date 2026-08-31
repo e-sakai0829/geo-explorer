@@ -146,19 +146,10 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
             <span className="text-slate-300">|</span>
 
-            <div className="flex items-center gap-2 text-slate-500">
-              <span>
-                {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
-                <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
-              </span>
-              <button
-                onClick={handleResetCredits}
-                title="クレジットをリセット"
-                className="p-1 hover:bg-slate-100 text-slate-400 hover:text-indigo-600 rounded transition-colors cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <span className="text-slate-500">
+              {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
+              <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
+            </span>
           </div>
         </header>
 
