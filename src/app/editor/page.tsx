@@ -14,7 +14,9 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Printer,
+  FileDown
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -30,6 +32,26 @@ function EditorInner() {
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Markdown (.md) ファイルのダウンロード
+  const handleDownloadMarkdown = () => {
+    if (!article) return;
+    const blob = new Blob([article], { type: "text/markdown;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safePrompt = prompt.replace(/[/\\?%*:|"<>]/g, "_") || "AEO_Article";
+    link.href = url;
+    link.download = `AEO_Article_${safePrompt}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // PDF / 印刷レポートの呼び出し
+  const handlePrintPDF = () => {
+    window.print();
+  };
 
   useEffect(() => {
     setTargetLanguage(uiLang);
@@ -245,15 +267,52 @@ function EditorInner() {
               </div>
 
               {article && (
-                <button
-                  onClick={handleCopy}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? t.editor_copied : t.editor_copy_btn}
-                </button>
+                <div className="flex items-center gap-2 print:hidden">
+                  <button
+                    onClick={handleCopy}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? t.editor_copied : t.editor_copy_btn}</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadMarkdown}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                  >
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span>.md 保存</span>
+                  </button>
+
+                  <button
+                    onClick={handlePrintPDF}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>PDF/印刷</span>
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* Printable Header for Article (印刷・PDF出力時のみ紙面トップに表示) */}
+            {article && (
+              <div className="hidden print:block border-b-2 border-slate-900 pb-4 p-6 mb-4">
+                <div className="flex justify-between items-end">
+                  <div>
+                    <span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">GEO Explorer Article Draft</span>
+                    <h1 className="text-2xl font-black text-slate-900 mt-1">AEO直答権威記事 原稿レポート</h1>
+                  </div>
+                  <div className="text-right text-xs text-slate-500 font-mono">
+                    発行日: {new Date().toLocaleDateString("ja-JP")}
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-700">
+                  <div><strong>ターゲットプロンプト:</strong> {prompt}</div>
+                  <div><strong>対象ブランド:</strong> {brandName}</div>
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 p-6 overflow-y-auto">
               {article ? (
