@@ -6,7 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import CookieBanner from "@/components/CookieBanner";
 import { LanguageProvider, useLanguage } from "@/context/LanguageContext";
 import { Language } from "@/lib/i18n";
-import { ChevronDown, Globe, Check } from "lucide-react";
+import { ChevronDown, Globe, Check, RefreshCw } from "lucide-react";
 
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -22,6 +22,30 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const [projectName, setProjectName] = useState("自社ブランド");
   const [projectDomain, setProjectDomain] = useState("https://example.com");
   const [credits, setCredits] = useState({ total: 10, used: 0, remaining: 10 });
+
+  const fetchCredits = () => {
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setCredits({
+            total: data.monthly_credits,
+            used: data.used_credits,
+            remaining: data.remaining_credits,
+          });
+        }
+      })
+      .catch(() => {});
+  };
+
+  const handleResetCredits = async () => {
+    try {
+      const res = await fetch("/api/user/credits", { method: "POST" });
+      if (res.ok) {
+        fetchCredits();
+      }
+    } catch (e) {}
+  };
 
   const languages: { code: Language; name: string; flag: string }[] = [
     { code: "ja", name: "日本語", flag: "🇯🇵" },
@@ -45,18 +69,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
         .catch(() => {});
 
       // クレジット残高をDBから取得
-      fetch("/api/user/credits")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && !data.error) {
-            setCredits({
-              total: data.monthly_credits,
-              used: data.used_credits,
-              remaining: data.remaining_credits,
-            });
-          }
-        })
-        .catch(() => {});
+      fetchCredits();
     }
   }, [isFullPage, pathname]);
 
@@ -133,10 +146,19 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
             <span className="text-slate-300">|</span>
 
-            <span className="text-slate-500">
-              {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
-              <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
-            </span>
+            <div className="flex items-center gap-2 text-slate-500">
+              <span>
+                {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
+                <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
+              </span>
+              <button
+                onClick={handleResetCredits}
+                title="クレジットをリセット"
+                className="p-1 hover:bg-slate-100 text-slate-400 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </header>
 
