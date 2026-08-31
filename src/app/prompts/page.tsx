@@ -15,7 +15,9 @@ import {
   Globe, 
   Zap,
   LogIn,
-  Gift
+  Gift,
+  Printer,
+  FileDown
 } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
@@ -25,6 +27,10 @@ function PromptsContent() {
   const searchParams = useSearchParams();
   const supabase = createClient();
   const { lang, t } = useLanguage();
+
+  const handlePrintReport = () => {
+    window.print();
+  };
 
   const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
@@ -245,6 +251,44 @@ function PromptsContent() {
       {/* Analysis Result Display */}
       {result && (
         <div className="space-y-6">
+          {/* PDF / Print Action Header (画面表示用ボタン) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 text-white p-5 rounded-2xl shadow-sm border border-slate-800 print:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold shrink-0">
+                <Printer className="w-5 h-5 text-indigo-300" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">📄 クライアント提出用 GEO/LLMO 診断レポート</h3>
+                <p className="text-[11px] text-slate-300 mt-0.5">現在の解析結果・診断評価・アクションプランをPDFとして出力・保存できます</p>
+              </div>
+            </div>
+
+            <button
+              onClick={handlePrintReport}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>PDF / 印刷レポートを出力する</span>
+            </button>
+          </div>
+
+          {/* Printable Header (印刷・PDF出力時のみ紙面トップに表示) */}
+          <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
+            <div className="flex justify-between items-end">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">GEO Explorer Official Report</span>
+                <h1 className="text-2xl font-black text-slate-900 mt-1">Google AI Overviews / Gemini 露出診断 ＆ 改善処方箋レポート</h1>
+              </div>
+              <div className="text-right text-xs text-slate-500 font-mono">
+                発行日: {new Date().toLocaleDateString("ja-JP")}
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-700">
+              <div><strong>調査プロンプト:</strong> {result.prompt}</div>
+              <div><strong>対象ブランド:</strong> {result.brandName}</div>
+            </div>
+          </div>
+
           {/* Status Overview Card */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className={`p-5 rounded-2xl border ${result.brandMentioned ? "bg-emerald-50/60 border-emerald-200" : "bg-rose-50/60 border-rose-200"}`}>
