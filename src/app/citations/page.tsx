@@ -63,16 +63,24 @@ export default function CitationsPage() {
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-semibold text-slate-500">{t.cit_total_sources}</div>
           <div className="text-3xl font-black text-slate-900 tracking-tight">132 <span className="text-xs font-normal text-slate-400">URLs</span></div>
-          <div className="text-[11px] text-indigo-600 font-semibold">
-            {lang === "zh-TW" ? "涵蓋業界主要商業提示詞" : lang === "en" ? "Covering target commercial queries" : "業界主要プロンプトを網羅"}
+          <div className="text-[11px] text-indigo-700 font-medium leading-relaxed pt-2 border-t border-slate-100">
+            💡 {lang === "zh-TW" 
+              ? "AI 引用的網頁總數（數量越多代表該市場對策價值越高）" 
+              : lang === "en" 
+              ? "Total Web Pages Cited by AI (Higher = High Priority Market)" 
+              : "AIが参照したWebページ数（多いほど対策価値の高い市場）"}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-semibold text-slate-500">{t.cit_top_domains}</div>
           <div className="text-3xl font-black text-indigo-600 tracking-tight">18 <span className="text-xs font-normal text-slate-400">Domains</span></div>
-          <div className="text-[11px] text-emerald-600 font-semibold">
-            {lang === "zh-TW" ? "高權重外部媒體佔比 78%" : lang === "en" ? "Authority Media Share 78%" : "高オーソリティメディア 78%"}
+          <div className="text-[11px] text-emerald-700 font-medium leading-relaxed pt-2 border-t border-slate-100">
+            💡 {lang === "zh-TW" 
+              ? "AI 學習採用的主要網域數（反映權威媒體壟斷程度）" 
+              : lang === "en" 
+              ? "Top Domains Used by AI (Shows Authority Concentration)" 
+              : "AIが学習に利用した主要ドメイン数（上位の独占度を提示）"}
           </div>
         </div>
 
@@ -83,8 +91,12 @@ export default function CitationsPage() {
           <div className="text-3xl font-black text-slate-900 tracking-tight">
             {lang === "zh-TW" ? "中等" : lang === "en" ? "Medium" : "中 (Medium)"}
           </div>
-          <div className="text-[11px] text-slate-400">
-            {lang === "zh-TW" ? "可透過 AEO 專文優先突破" : lang === "en" ? "Actionable via direct AEO content" : "AEO直答記事の追加で引用獲得可能"}
+          <div className="text-[11px] text-amber-700 font-medium leading-relaxed pt-2 border-t border-slate-100">
+            💡 {lang === "zh-TW" 
+              ? "引用奪取難易度（中：佈局 AEO 直答內容即可奪取引用）" 
+              : lang === "en" 
+              ? "Gap Difficulty (Medium: Win citations via direct AEO content)" 
+              : "引用奪還の難易度（中: 直答構造コンテンツの追加で奪還可能）"}
           </div>
         </div>
       </div>
