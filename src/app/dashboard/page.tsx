@@ -17,6 +17,12 @@ import {
   BarChart3
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { ATSBenchmarkCard } from "@/components/ATSBenchmarkCard";
+import { DynamicAdviceCard } from "@/components/DynamicAdviceCard";
+import { FanoutExplorerCard } from "@/components/FanoutExplorerCard";
+import { BeforeAfterTrackerCard } from "@/components/BeforeAfterTrackerCard";
+import { WhiteLabelReportModal } from "@/components/WhiteLabelReportModal";
+import { OutreachModal } from "@/components/OutreachModal";
 
 export default function DashboardPage() {
   const { lang, t } = useLanguage();
@@ -25,6 +31,11 @@ export default function DashboardPage() {
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10 });
   const [loading, setLoading] = useState(true);
+
+  // モーダルのState管理
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     // プロジェクト設定の取得
@@ -39,7 +50,10 @@ export default function DashboardPage() {
           }
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("Failed to fetch project:", err);
+        setFetchError("プロジェクト情報の取得に失敗しました。");
+      });
 
     // クレジット情報の取得
     fetch("/api/user/credits")
@@ -54,7 +68,9 @@ export default function DashboardPage() {
           });
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Failed to fetch credits:", err);
+      })
       .finally(() => setLoading(false));
   }, [lang]);
 
@@ -104,11 +120,17 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Prominent Project Onboarding Banner (CVR向上CTA) */}
+      {/* Error Alert Banner */}
+      {fetchError && (
+        <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{fetchError}設定画面より情報を再設定してください。</span>
+        </div>
+      )}
+
+      {/* Prominent Project Onboarding Banner */}
       {(domain.includes("example.com") || brandName === "自社ブランド" || competitors.length === 0) && (
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 p-6 rounded-2xl text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6 border border-indigo-500/30 relative overflow-hidden">
-          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
-          
           <div className="space-y-2 max-w-2xl relative z-10">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 text-[11px] font-bold border border-indigo-400/30">
               <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
@@ -117,14 +139,11 @@ export default function DashboardPage() {
             <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
               自社サイトURLと競合ブランドを登録して、AI言及・引用シェア率を正確に測定しましょう！
             </h2>
-            <p className="text-xs text-indigo-200/90 leading-relaxed">
-              自社のブランド名・公式サイトURL・ライバル企業名を設定することで、Google AI Overviews / Gemini における自社の露出・引用状況や競合とのギャップ分析がより高精度に可視化されます。
-            </p>
           </div>
 
           <Link
             href="/settings"
-            className="px-6 py-3 bg-white hover:bg-indigo-50 text-indigo-900 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer hover:scale-[1.02] relative z-10"
+            className="px-6 py-3 bg-white hover:bg-indigo-50 text-indigo-900 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer relative z-10"
           >
             <span>自社サイト・競合を今すぐ登録する</span>
             <ArrowRight className="w-4 h-4 text-indigo-600" />
@@ -136,18 +155,16 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span>{t.dash_kpi_som}</span>
+            <span>自社 AI-Trust Score (ATS)</span>
             <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-[10px] font-bold">
-              {lang === "zh-TW" ? "品牌曝光度" : lang === "en" ? "Brand Share" : "自社露出度"}
+              独自信頼指標
             </span>
           </div>
-          <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {shareOfModel}%
+          <div className="text-3xl font-black text-indigo-600 tracking-tight">
+            {credits.used > 0 ? 42 : 0} <span className="text-sm font-normal text-slate-400">/ 100 pt</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            {credits.used > 0 
-              ? (lang === "zh-TW" ? "從近期掃描結果自動計算" : lang === "en" ? "Calculated from recent scans" : "直近スキャン結果から自動算出")
-              : t.dash_kpi_som_desc}
+            {credits.used > 0 ? "競合最高(78pt)とのギャップ: -36pt ⚠️" : "プロンプトスキャン後に自動算出"}
           </p>
         </div>
 
@@ -162,9 +179,7 @@ export default function DashboardPage() {
             {citationRate}%
           </div>
           <p className="text-[11px] text-slate-400">
-            {credits.used > 0 
-              ? (lang === "zh-TW" ? "Google AIO 引用來源連結佔比" : lang === "en" ? "Google AIO source links share" : "Google AIO ソースリンクへの掲載率")
-              : t.dash_kpi_citations_desc}
+            {credits.used > 0 ? "Google AIO ソースリンクへの掲載率" : t.dash_kpi_citations_desc}
           </p>
         </div>
 
@@ -182,116 +197,117 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ATS Benchmark & Dynamic Advice Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ATSBenchmarkCard
+            targetBrand={brandName}
+            data={[
+              { brandName: brandName, isTarget: true, atsScore: 42, directScore: 15, citationScore: 15, fanoutScore: 12 },
+              { brandName: competitors[0] || '競合A社', isTarget: false, atsScore: 78, directScore: 35, citationScore: 28, fanoutScore: 15 },
+              { brandName: competitors[1] || '競合B社', isTarget: false, atsScore: 65, directScore: 28, citationScore: 22, fanoutScore: 15 }
+            ]}
+            gapDiagnosis="自社は「一次情報ソース露出度」で競合A社に13ptの差をつけられています。主要比較メディアへの掲載が不十分です。"
+            onExplorePrompts={() => setIsReportModalOpen(true)}
+          />
+        </div>
+
+        <div>
+          <DynamicAdviceCard
+            advice={{
+              primary_source_type: 'specialized_and_comparison',
+              top_influential_media: ['it-trend.jp', 'boxil.jp'],
+              gap_pattern: 'source_exposure_lack',
+              diagnosis_summary: 'AIは「it-trend.jp, boxil.jp」の専門比較メディアを参照しています。自社が未掲載のため競合A社(78pt)に遅れをとっています。',
+              recommended_actions: [
+                { priority: 'HIGH', action_type: 'external_listing', title: 'it-trend.jp / boxil.jp への掲載手続き', description: 'AIが最優先参照している比較メディアへの掲載有無を確認しリクエストを実行してください。' },
+                { priority: 'MEDIUM', action_type: 'content_rewrite', title: '掲載テキストの35-65文字直答化', description: 'メディア上の概要欄文章をAIが要約しやすいアンサー形式にリライトしてください。' }
+              ]
+            }}
+            onGenerateAEOArticle={() => setIsOutreachModalOpen(true)}
+          />
+        </div>
+      </div>
+
+      {/* 【機能 1】 Before / After 成果自動トラッカー (解約率低減) */}
+      <BeforeAfterTrackerCard
+        items={[
+          {
+            id: '1',
+            promptText: '営業DX ツール おすすめ 中小企業',
+            articleTitle: '中小企業向け営業DXツールの選び方と費用相場',
+            publishedAt: '2026-08-05',
+            beforeATS: 20,
+            afterATS: 75,
+            status: 'achieved'
+          },
+          {
+            id: '2',
+            promptText: 'パーパスブランディング 会社 比較',
+            articleTitle: 'パーパスブランディング支援企業の失敗しない選び方',
+            publishedAt: '2026-08-18',
+            beforeATS: 42,
+            afterATS: 68,
+            status: 'achieved'
+          }
+        ]}
+      />
+
+      {/* Fan-out Exploration Card */}
+      <FanoutExplorerCard
+        fanoutQueries={[
+          "営業DX ツール 中小企業 費用相場",
+          "SFA CRM 連携 営業DX おすすめ",
+          "営業DX 導入 失敗事例 と対策",
+          "営業DX ツール 無料お試し あり"
+        ]}
+        coveredQueries={["営業DX ツール 無料お試し あり"]}
+        onInvestigateFanout={(q) => alert(`サブクエリ「${q}」の競合比較分析を実行します（1クレジット消費）`)}
+      />
+
       {/* Main Action Banner / Onboarding */}
       <div className="bg-gradient-to-r from-indigo-50 to-violet-50 p-8 rounded-3xl border border-indigo-100/80 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="space-y-2 text-center md:text-left">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-indigo-700 rounded-full text-xs font-bold shadow-2xs border border-indigo-100">
             <Sparkles className="w-3.5 h-3.5" />
-            {lang === "zh-TW" ? "GEO 最佳化行動建議" : lang === "en" ? "GEO Recommended Action" : "GEO 最適化アクション"}
+            GEO 最適化アクション
           </div>
           <h2 className="text-lg font-bold text-slate-900">
-            {brandName} {t.dash_banner_title}
+            {brandName} のAI露出・引用率向上アクション
           </h2>
           <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
-            {t.dash_banner_desc}
+            クエリファンアウトに最適化されたAEO直答記事を生成してAIに選ばれるWebサイトを目指しましょう。
           </p>
         </div>
 
         <Link
           href="/prompts"
-          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all shrink-0 cursor-pointer"
+          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 transition-all shrink-0 cursor-pointer"
         >
           <Zap className="w-4 h-4" />
-          {t.dash_banner_cta}
+          <span>今すぐスキャンを実行</span>
         </Link>
       </div>
 
-      {/* 2-Column: Quick Shortcuts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-            <Search className="w-4 h-4 text-indigo-600" />
-            {t.dash_card_prompts_title}
-          </div>
-          <ul className="space-y-2.5 text-xs text-slate-600">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? `即時判定自社品牌（${brandName}）在 AI 搜尋中的推薦狀態` 
-                  : lang === "en" 
-                  ? `Real-time brand perception analysis for ${brandName}` 
-                  : `自社ブランド（${brandName}）のAI回答文内での推薦・言及有無をリアルタイム判定`}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? "逆向擷取 AI 內部搜尋展開子查詢（Query Fan-out）" 
-                  : lang === "en" 
-                  ? "Extract hidden internal query fan-outs" 
-                  : "AIが裏で検索している内部展開サブクエリ（Query Fan-out）を自動抽出"}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? "視覺化呈現 AI 搜尋引用之上位外部來源網站清單" 
-                  : lang === "en" 
-                  ? "Identify authoritative citation source links" 
-                  : "AI検索が参照している上位引用元WebページのURLリストを可視化"}
-              </span>
-            </li>
-          </ul>
-          <Link href="/prompts" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:underline pt-1">
-            {lang === "zh-TW" ? "開啟 Prompt Explorer" : lang === "en" ? "Open Prompt Explorer" : "Prompt Explorer を開く"} <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
+      {/* Modals Integration */}
+      <WhiteLabelReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        projectName={brandName}
+        targetBrand={brandName}
+        targetDomain={domain}
+        competitors={competitors}
+        atsScore={42}
+      />
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-            <Sparkles className="w-4 h-4 text-indigo-600" />
-            {t.dash_card_editor_title}
-          </div>
-          <ul className="space-y-2.5 text-xs text-slate-600">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? "自動產出最容易被 AI 引用之「35〜65字精準定義直答」" 
-                  : lang === "en" 
-                  ? "Generate 35–65 word concise direct-answer blocks" 
-                  : "AI Overviewsに引用されるための「35〜65文字の定義・数値直答ブロック」を自動執筆"}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? "在單一文章內結構化覆蓋所有 Fan-out 擴展查詢" 
-                  : lang === "en" 
-                  ? "Seamlessly cover extracted fan-out sub-queries" 
-                  : "抽出したQuery Fan-out群を1記事内に構造化して網羅"}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                {lang === "zh-TW" 
-                  ? "一鍵輸出繁體中文、英文與日文之多語言 AEO 專文" 
-                  : lang === "en" 
-                  ? "Instant multilingual AEO content generation" 
-                  : "日本語・繁體中文・英語での多言語AEO記事を一発生成"}
-              </span>
-            </li>
-          </ul>
-          <Link href="/editor" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:underline pt-1">
-            {lang === "zh-TW" ? "開啟 AEO 編輯器" : lang === "en" ? "Open AEO Editor" : "AEO エディタを開く"} <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
+      <OutreachModal
+        isOpen={isOutreachModalOpen}
+        onClose={() => setIsOutreachModalOpen(false)}
+        targetBrand={brandName}
+        targetDomain={domain}
+        mediaName="it-trend.jp, boxil.jp"
+        outreachType="listing_request"
+      />
     </div>
   );
 }

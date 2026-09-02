@@ -50,6 +50,11 @@ create table if not exists public.prompt_analysis_logs (
     fanout_queries text[] default array[]::text[],
     citation_sources jsonb default '[]'::jsonb,
     competitor_mentions jsonb default '{}'::jsonb,
+    -- PRD v3.0 ATS & 動的診断フィールド
+    target_ats_score integer default 0,
+    competitor_ats_scores jsonb default '{}'::jsonb,
+    primary_source_type text,
+    diagnostic_advice jsonb default '{}'::jsonb,
     scanned_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

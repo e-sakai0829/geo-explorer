@@ -49,6 +49,25 @@ export interface Translations {
   problem3_title: string;
   problem3_desc: string;
 
+  // LP Comparison & Value Proposition
+  comp_badge: string;
+  comp_title: string;
+  comp_desc: string;
+
+  // LP Target Personas
+  target_badge: string;
+  target_title: string;
+  target_desc: string;
+  target_inhouse_title: string;
+  target_inhouse_desc: string;
+  target_agency_title: string;
+  target_agency_desc: string;
+
+  // LP Workflow
+  workflow_badge: string;
+  workflow_title: string;
+  workflow_desc: string;
+
   // LP Features
   f1_badge: string;
   f1_title: string;
@@ -170,9 +189,9 @@ export const dictionaries: Record<Language, Translations> = {
     insights_nav: "GEO/AEOナレッジ",
     free_trial: "無料診断を試す",
 
-    hero_badge: "次世代 AI検索エンジン最適化 (GEO) プラットフォーム",
+    hero_badge: "次世代 AI検索エンジン最適化 (GEO) SaaS",
     hero_title: "AI検索で、自社が「推薦・引用される」新常識。",
-    hero_desc: "Google AI Overviews ＆ Gemini をリアルタイムスキャン。AI内部の検索展開（Query Fan-out）を特定し、35〜65文字の直答コンテンツで自社への被引用シェアを最大化します。",
+    hero_desc: "「ラッコキーワード」の手軽さで、ミエルカGEOを超える。Google AI Overviews ＆ Gemini をリアルタイム解析し、1クリックで選ばれる直答（AEO）記事を生成・効果測定まで自動完結。",
     search_placeholder: "例: 自社業界のおすすめ・比較・費用相場など",
     search_cta: "無料スキャン実行",
     no_card: "クレジットカード不要",
@@ -187,6 +206,22 @@ export const dictionaries: Record<Language, Translations> = {
     problem2_desc: "AIは入力キーワードを裏で数十個のサブクエリ（Query Fan-out）に自動展開して調査します。単一キーワードのSEO記事ではAIの参照ソースに選ばれません。",
     problem3_title: "回答直答形式（AEO）への転換が必須",
     problem3_desc: "AIは前置きの長い記事を無視します。冒頭に「35〜65文字の定義・数値直答」を配置し、比較表と構造化データを完備したページのみが引用元リンクに採用されます。",
+
+    comp_badge: "COST & FEATURE COMPARISON",
+    comp_title: "なぜ高額な他社ツールではなくGEO Explorerなのか？",
+    comp_desc: "月10万円以上のエンタープライズツールや、GEOデータに対応していない旧世代のSEOツールとの違いは一目瞭然です。",
+
+    target_badge: "TARGET SOLUTIONS",
+    target_title: "すべてのWebマーケターと代理店のための専用機能",
+    target_desc: "リソースが限られたインハウスマーケターと、クライアント成果の最大化を目指すSEO代理店の双方に最適化されています。",
+    target_inhouse_title: "インハウスマーケター（1人マーケ・兼任向け）",
+    target_inhouse_desc: "月額9,800円〜の圧倒的低価格。専門知識がなくてもAI検索で競合に奪われている引用枠を瞬時に特定し、1クリックでAEO直答記事を作成できます。",
+    target_agency_title: "マーケティング代理店 / SEOコンサルタント",
+    target_agency_desc: "Agencyプラン（79,800円）なら自社ロゴ入りのホワイトラベルレポートを出力可能。クライアントへのGEO提案とコンテンツ自動作成で利益率を大幅向上。",
+
+    workflow_badge: "4-STEP AUTOMATION WORKFLOW",
+    workflow_title: "可視化から効果測定まで、完全自動化されたコアフロー",
+    workflow_desc: "単なるAI言及率のモニタリングに留まらず、実際のAEO記事執筆からチャーンを防ぐ成果検証まで一気通貫でカバーします。",
 
     f1_badge: "リアルタイム・パーセプション解析",
     f1_title: "AI Overviews ＆ Gemini で自社がどう推薦されているか可視化",
@@ -318,6 +353,22 @@ export const dictionaries: Record<Language, Translations> = {
     problem3_title: "必須轉向權威直答架構（AEO）",
     problem3_desc: "AI 引擎會自動忽略冗長的廢話前言。只有在開頭配置「35〜65字精準定義直答」、具備對比表格與結構化資料的頁面，才能被 AI 採用為引用連結。",
 
+    comp_badge: "COST & FEATURE COMPARISON",
+    comp_title: "為什麼選擇 GEO Explorer 而非高昂的傳統工具？",
+    comp_desc: "相較於每月動輒數千美元的企业級工具或缺乏 GEO 分析的舊式 SEO 軟體，優勢一目瞭然。",
+
+    target_badge: "TARGET SOLUTIONS",
+    target_title: "為企業內部行銷人與 SEO 代理商量身打造",
+    target_desc: "針對資源有限的企業 Marketer 與追求客戶成效最大化的 SEO 行銷代理商提供專屬優勢。",
+    target_inhouse_title: "企業內部行銷團隊 (In-house Marketer)",
+    target_inhouse_desc: "超低入門門檻，無需具備複雜的 Prompt 工程知識，即可即時抓出被競品佔據的 AI 引用缺口，並一鍵產出 AEO 直答專文。",
+    target_agency_title: "數位行銷代理商 / SEO 顧問公司",
+    target_agency_desc: "訂閱 Agency 方案即可輸出匯入自社 Logo 的白標報告 (White-label Report)，加速客戶提案與 AEO 內容大量產出。",
+
+    workflow_badge: "4-STEP AUTOMATION WORKFLOW",
+    workflow_title: "從缺口追蹤到成效驗證，全自動化核心工作流",
+    workflow_desc: "不只停留在 AI 推薦率監測，更一站式涵蓋 AEO 直答文章撰寫與客戶 ROI 成果驗證。",
+
     f1_badge: "即時品牌曝光與認知解析",
     f1_title: "視覺化呈現自社品牌在 AI Overviews 與 Gemini 中的推薦狀態",
     f1_desc: "針對目標商業提示詞，即時分析 AI 是否推薦自社或競品，並精準指出 AI 採用了哪些外部網頁作為引用來源。",
@@ -430,9 +481,9 @@ export const dictionaries: Record<Language, Translations> = {
     insights_nav: "GEO Insights",
     free_trial: "Start Free Scan",
 
-    hero_badge: "Next-Gen Generative Engine Optimization (GEO) Platform",
+    hero_badge: "Next-Gen Generative Engine Optimization (GEO) SaaS",
     hero_title: "Be Recommended and Cited in Generative AI Search.",
-    hero_desc: "Real-time scanning of Google AI Overviews and Gemini. Uncover internal query fan-outs and maximize your citation share with 35–65 word authoritative direct-answer content.",
+    hero_desc: "Simplicity of keyword tools meets enterprise GEO analytics. Real-time scanning of Google AI Overviews & Gemini to turn citation gaps into 1-click authoritative direct-answer content.",
     search_placeholder: "e.g., Best Enterprise Software Solutions 2026",
     search_cta: "Run Free AI Scan",
     no_card: "No credit card required",
@@ -447,6 +498,22 @@ export const dictionaries: Record<Language, Translations> = {
     problem2_desc: "Generative AI expands input keywords into dozens of internal sub-queries (Query Fan-out). Standard SEO pages miss the multifaceted criteria AI uses to select citation sources.",
     problem3_title: "Direct-Answer Architecture (AEO) is Mandatory",
     problem3_desc: "AI skips introductory fluff. Pages featuring concise 35–65 word definitions, comparison tables, and structured data are preferentially cited as primary sources.",
+
+    comp_badge: "COST & FEATURE COMPARISON",
+    comp_title: "Why GEO Explorer Over Expensive Legacy Tools?",
+    comp_desc: "Clear advantages over $1,000+/mo enterprise suites or legacy SEO software lacking native Generative Engine Optimization.",
+
+    target_badge: "TARGET SOLUTIONS",
+    target_title: "Tailored for In-house Marketers and Marketing Agencies",
+    target_desc: "Designed to empower resource-constrained marketers and high-velocity SEO agencies driving client growth.",
+    target_inhouse_title: "In-house Marketing Teams (Lean & Solo Marketers)",
+    target_inhouse_desc: "Ultra-affordable plans starting at $65/mo. Instantly spot citation gaps stolen by competitors and generate AEO direct-answer articles in 1-click.",
+    target_agency_title: "Marketing Agencies & SEO Consultants",
+    target_agency_desc: "Agency Plan ($530/mo) includes custom white-label reports with your agency logo, automating client proposals and high-volume AEO delivery.",
+
+    workflow_badge: "4-STEP AUTOMATION WORKFLOW",
+    workflow_title: "From Citation Tracking to ROI Verification",
+    workflow_desc: "More than just monitoring perception. An end-to-end workflow covering gap analysis, AEO generation, and client ROI proof.",
 
     f1_badge: "Real-Time Perception Analysis",
     f1_title: "Visualize Brand Citations in Google AI Overviews & Gemini",
