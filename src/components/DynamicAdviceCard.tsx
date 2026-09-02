@@ -1,15 +1,19 @@
 "use client";
 
 import React from "react";
-import { Sparkles, ArrowRight, ExternalLink, CheckCircle2, FileText, Globe, Newspaper, GraduationCap, Users } from "lucide-react";
-import { DiagnosticAdvice, PrimarySourceType } from "@/lib/ats-calculator";
+import { Sparkles, ArrowRight, Mail, FileText, Globe, Newspaper, GraduationCap, Users } from "lucide-react";
+import { DiagnosticAdvice, PrimarySourceType, RecommendedAction } from "@/lib/ats-calculator";
 
 interface DynamicAdviceCardProps {
   advice: DiagnosticAdvice;
   onGenerateAEOArticle?: () => void;
+  /** action_type が external_listing / press_release のアクションに対して原稿生成モーダルを開くための任意コールバック */
+  onDraftOutreach?: (action: RecommendedAction) => void;
 }
 
-export function DynamicAdviceCard({ advice, onGenerateAEOArticle }: DynamicAdviceCardProps) {
+const OUTREACH_ACTION_TYPES: RecommendedAction["action_type"][] = ["external_listing", "press_release"];
+
+export function DynamicAdviceCard({ advice, onGenerateAEOArticle, onDraftOutreach }: DynamicAdviceCardProps) {
   if (!advice) {
     return (
       <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs">
@@ -78,6 +82,15 @@ export function DynamicAdviceCard({ advice, onGenerateAEOArticle }: DynamicAdvic
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="text-xs font-bold text-slate-900">{act.title}</div>
                 <div className="text-[11px] text-slate-600 leading-relaxed">{act.description}</div>
+                {onDraftOutreach && OUTREACH_ACTION_TYPES.includes(act.action_type) && (
+                  <button
+                    onClick={() => onDraftOutreach(act)}
+                    className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                  >
+                    <Mail className="w-3 h-3" />
+                    <span>依頼メール/PR原稿を生成</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}

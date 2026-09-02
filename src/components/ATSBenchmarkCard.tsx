@@ -17,13 +17,15 @@ interface ATSBenchmarkCardProps {
   data: CompetitorATSData[];
   gapDiagnosis?: string;
   onExplorePrompts?: () => void;
+  exploreButtonLabel?: string;
 }
 
 export function ATSBenchmarkCard({
   targetBrand,
   data,
   gapDiagnosis,
-  onExplorePrompts
+  onExplorePrompts,
+  exploreButtonLabel = "プロンプト詳細を調査"
 }: ATSBenchmarkCardProps) {
   // スコア順にソート
   const sortedData = [...data].sort((a, b) => b.atsScore - a.atsScore);
@@ -78,7 +80,7 @@ export function ATSBenchmarkCard({
               const rank = index + 1;
               return (
                 <tr
-                  key={item.brandName}
+                  key={`${item.brandName}-${index}`}
                   className={`transition-colors ${
                     item.isTarget 
                       ? 'bg-indigo-50/60 font-semibold text-slate-900 border-l-4 border-l-indigo-600' 
@@ -146,7 +148,7 @@ export function ATSBenchmarkCard({
               onClick={onExplorePrompts}
               className="inline-flex items-center gap-1 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-all shrink-0 cursor-pointer"
             >
-              <span>プロンプト詳細を調査</span>
+              <span>{exploreButtonLabel}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}

@@ -1,20 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { 
-  TrendingUp, 
-  Search, 
-  Sparkles, 
-  CheckCircle2, 
-  AlertCircle, 
-  Layers, 
-  ArrowRight, 
-  ExternalLink,
-  ShieldCheck,
+import { useRouter } from "next/navigation";
+import {
+  Search,
+  Sparkles,
+  AlertCircle,
+  ArrowRight,
   Bot,
-  Zap,
-  BarChart3
+  Zap
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { ATSBenchmarkCard } from "@/components/ATSBenchmarkCard";
@@ -23,9 +18,17 @@ import { FanoutExplorerCard } from "@/components/FanoutExplorerCard";
 import { BeforeAfterTrackerCard } from "@/components/BeforeAfterTrackerCard";
 import { WhiteLabelReportModal } from "@/components/WhiteLabelReportModal";
 import { OutreachModal } from "@/components/OutreachModal";
+import { RecommendedAction } from "@/lib/ats-calculator";
+
+const DEFAULT_BRAND_NAME: Record<string, string> = {
+  ja: "自社ブランド",
+  "zh-TW": "自社品牌",
+  en: "My Brand",
+};
 
 export default function DashboardPage() {
   const { lang, t } = useLanguage();
+  const router = useRouter();
   const [brandName, setBrandName] = useState("自社ブランド");
   const [domain, setDomain] = useState("https://example.com");
   const [competitors, setCompetitors] = useState<string[]>([]);
@@ -34,16 +37,24 @@ export default function DashboardPage() {
 
   // モーダルのState管理
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
+  const [outreachAction, setOutreachAction] = useState<RecommendedAction | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
+  // データ取得は言語に依存しないため、一度だけ実行する（言語切替の度に再フェッチしない）
   useEffect(() => {
+    let cancelled = false;
+
     // プロジェクト設定の取得
     fetch("/api/user/project")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`project fetch failed: ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
+        if (cancelled) return;
         if (data?.project) {
-          setBrandName(data.project.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
+          if (data.project.name) setBrandName(data.project.name);
           setDomain(data.project.domain || "https://example.com");
           if (Array.isArray(data.project.competitors)) {
             setCompetitors(data.project.competitors);
@@ -51,31 +62,70 @@ export default function DashboardPage() {
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error("Failed to fetch project:", err);
         setFetchError("プロジェクト情報の取得に失敗しました。");
       });
 
     // クレジット情報の取得
     fetch("/api/user/credits")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`credits fetch failed: ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
+        if (cancelled) return;
         if (data && !data.error) {
           setCredits({
-            plan: data.plan.charAt(0).toUpperCase() + data.plan.slice(1),
-            total: data.monthly_credits,
-            used: data.used_credits,
-            remaining: data.remaining_credits,
+            plan: (data.plan?.charAt(0)?.toUpperCase() ?? "") + (data.plan?.slice(1) ?? ""),
+            total: data.monthly_credits ?? 0,
+            used: data.used_credits ?? 0,
+            remaining: data.remaining_credits ?? 0,
           });
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error("Failed to fetch credits:", err);
+        setFetchError("クレジット情報の取得に失敗しました。");
       })
-      .finally(() => setLoading(false));
-  }, [lang]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const shareOfModel = credits.used > 0 ? 35 : 0;
+    return () => { cancelled = true; };
+  }, []);
+
+  // ブランド名が未設定の間だけ、言語に応じたプレースホルダーを表示する（再フェッチはしない）
+  const displayBrandName = brandName === "自社ブランド" ? (DEFAULT_BRAND_NAME[lang] ?? DEFAULT_BRAND_NAME.ja) : brandName;
+
   const citationRate = credits.used > 0 ? 25 : 0;
+
+  const dynamicAdvice = useMemo(() => ({
+    primary_source_type: 'specialized_and_comparison' as const,
+    top_influential_media: ['it-trend.jp', 'boxil.jp'],
+    gap_pattern: 'source_exposure_lack' as const,
+    diagnosis_summary: `AIは「it-trend.jp, boxil.jp」の専門比較メディアを参照しています。自社が未掲載のため競合A社(78pt)に遅れをとっています。`,
+    recommended_actions: [
+      { priority: 'HIGH' as const, action_type: 'external_listing' as const, title: 'it-trend.jp / boxil.jp への掲載手続き', description: 'AIが最優先参照している比較メディアへの掲載有無を確認しリクエストを実行してください。' },
+      { priority: 'MEDIUM' as const, action_type: 'content_rewrite' as const, title: '掲載テキストの35-65文字直答化', description: 'メディア上の概要欄文章をAIが要約しやすいアンサー形式にリライトしてください。' }
+    ]
+  }), []);
+
+  const isAgencyPlan = credits.plan.toLowerCase() === "agency";
+
+  const handleOpenReport = () => {
+    if (isAgencyPlan) {
+      setIsReportModalOpen(true);
+    } else {
+      router.push("/pricing");
+    }
+  };
+
+  const handleInvestigateFanout = (query: string) => {
+    setToast(`サブクエリ「${query}」の競合比較分析を実行しました（1クレジット消費）`);
+    setTimeout(() => setToast(null), 3500);
+  };
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
@@ -88,10 +138,10 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate">
             {lang === "zh-TW" 
-              ? `${brandName} 之 AI 搜尋曝光儀表板` 
-              : lang === "en" 
-              ? `${brandName} AI Search Visibility Dashboard` 
-              : `${brandName} の AI検索露出ダッシュボード`}
+              ? `${displayBrandName} 之 AI 搜尋曝光儀表板`
+              : lang === "en"
+              ? `${displayBrandName} AI Search Visibility Dashboard`
+              : `${displayBrandName} の AI検索露出ダッシュボード`}
           </h1>
           <p className="text-xs text-slate-500 mt-1 truncate">
             {lang === "zh-TW" ? "目標網域: " : lang === "en" ? "Domain: " : "対象ドメイン: "}
@@ -152,7 +202,7 @@ export default function DashboardPage() {
       )}
 
       {/* 3 Core KPI Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity ${loading ? 'opacity-60 animate-pulse' : 'opacity-100'}`}>
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
             <span>自社 AI-Trust Score (ATS)</span>
@@ -201,30 +251,23 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <ATSBenchmarkCard
-            targetBrand={brandName}
+            targetBrand={displayBrandName}
             data={[
-              { brandName: brandName, isTarget: true, atsScore: 42, directScore: 15, citationScore: 15, fanoutScore: 12 },
+              { brandName: displayBrandName, isTarget: true, atsScore: 42, directScore: 15, citationScore: 15, fanoutScore: 12 },
               { brandName: competitors[0] || '競合A社', isTarget: false, atsScore: 78, directScore: 35, citationScore: 28, fanoutScore: 15 },
               { brandName: competitors[1] || '競合B社', isTarget: false, atsScore: 65, directScore: 28, citationScore: 22, fanoutScore: 15 }
             ]}
             gapDiagnosis="自社は「一次情報ソース露出度」で競合A社に13ptの差をつけられています。主要比較メディアへの掲載が不十分です。"
-            onExplorePrompts={() => setIsReportModalOpen(true)}
+            onExplorePrompts={handleOpenReport}
+            exploreButtonLabel={isAgencyPlan ? "詳細レポートを出力" : "詳細レポートを見る (Agencyプラン)"}
           />
         </div>
 
         <div>
           <DynamicAdviceCard
-            advice={{
-              primary_source_type: 'specialized_and_comparison',
-              top_influential_media: ['it-trend.jp', 'boxil.jp'],
-              gap_pattern: 'source_exposure_lack',
-              diagnosis_summary: 'AIは「it-trend.jp, boxil.jp」の専門比較メディアを参照しています。自社が未掲載のため競合A社(78pt)に遅れをとっています。',
-              recommended_actions: [
-                { priority: 'HIGH', action_type: 'external_listing', title: 'it-trend.jp / boxil.jp への掲載手続き', description: 'AIが最優先参照している比較メディアへの掲載有無を確認しリクエストを実行してください。' },
-                { priority: 'MEDIUM', action_type: 'content_rewrite', title: '掲載テキストの35-65文字直答化', description: 'メディア上の概要欄文章をAIが要約しやすいアンサー形式にリライトしてください。' }
-              ]
-            }}
-            onGenerateAEOArticle={() => setIsOutreachModalOpen(true)}
+            advice={dynamicAdvice}
+            onGenerateAEOArticle={() => router.push("/editor")}
+            onDraftOutreach={(action) => setOutreachAction(action)}
           />
         </div>
       </div>
@@ -262,7 +305,7 @@ export default function DashboardPage() {
           "営業DX ツール 無料お試し あり"
         ]}
         coveredQueries={["営業DX ツール 無料お試し あり"]}
-        onInvestigateFanout={(q) => alert(`サブクエリ「${q}」の競合比較分析を実行します（1クレジット消費）`)}
+        onInvestigateFanout={handleInvestigateFanout}
       />
 
       {/* Main Action Banner / Onboarding */}
@@ -273,7 +316,7 @@ export default function DashboardPage() {
             GEO 最適化アクション
           </div>
           <h2 className="text-lg font-bold text-slate-900">
-            {brandName} のAI露出・引用率向上アクション
+            {displayBrandName} のAI露出・引用率向上アクション
           </h2>
           <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
             クエリファンアウトに最適化されたAEO直答記事を生成してAIに選ばれるWebサイトを目指しましょう。
@@ -289,24 +332,34 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* Toast Notification (alert()の代替) */}
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-slate-900 text-white text-xs font-semibold px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 max-w-md text-center"
+        >
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{toast}</span>
+        </div>
+      )}
+
       {/* Modals Integration */}
       <WhiteLabelReportModal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
-        projectName={brandName}
-        targetBrand={brandName}
+        targetBrand={displayBrandName}
         targetDomain={domain}
         competitors={competitors}
         atsScore={42}
       />
 
       <OutreachModal
-        isOpen={isOutreachModalOpen}
-        onClose={() => setIsOutreachModalOpen(false)}
-        targetBrand={brandName}
+        isOpen={outreachAction !== null}
+        onClose={() => setOutreachAction(null)}
+        targetBrand={displayBrandName}
         targetDomain={domain}
-        mediaName="it-trend.jp, boxil.jp"
-        outreachType="listing_request"
+        mediaName={dynamicAdvice.top_influential_media.join(', ')}
+        outreachType={outreachAction?.action_type === 'press_release' ? 'press_release' : 'listing_request'}
       />
     </div>
   );
