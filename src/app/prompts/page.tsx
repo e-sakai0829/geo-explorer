@@ -3,24 +3,57 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
-import { 
-  Search, 
-  Sparkles, 
-  ExternalLink, 
-  Layers, 
-  ArrowRight, 
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
-  Globe, 
+import {
+  Search,
+  Sparkles,
+  ExternalLink,
+  Layers,
+  ArrowRight,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Globe,
   Zap,
   LogIn,
   Gift,
   Printer,
-  FileDown
+  FileDown,
+  ListChecks,
+  Plus,
+  Trash2,
+  Wand2,
+  Tag
 } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
+import type { PromptImportance } from "@/types/geo";
+
+interface RegisteredPrompt {
+  id: string;
+  prompt_text: string;
+  category: string;
+  keyword: string | null;
+  search_intent: string | null;
+  importance: PromptImportance;
+  check_frequency: string;
+  last_scanned_at: string | null;
+  created_at: string;
+}
+
+interface PromptSuggestion {
+  category: string;
+  keyword: string;
+  promptText: string;
+  searchIntent: string;
+  importance: PromptImportance;
+}
+
+const IMPORTANCE_LABEL: Record<PromptImportance, string> = { high: "高", medium: "中", low: "低" };
+const IMPORTANCE_STYLE: Record<PromptImportance, string> = {
+  high: "bg-rose-50 text-rose-700 border-rose-200",
+  medium: "bg-amber-50 text-amber-700 border-amber-200",
+  low: "bg-slate-100 text-slate-600 border-slate-200",
+};
 
 function PromptsContent() {
   const router = useRouter();
@@ -74,6 +107,146 @@ function PromptsContent() {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
+  // ── プロンプト管理（登録・カテゴリ・重要度） ──
+  const [registeredPrompts, setRegisteredPrompts] = useState<RegisteredPrompt[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string>("すべて");
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualPrompt, setManualPrompt] = useState({ promptText: "", category: "未分類", importance: "medium" as PromptImportance });
+  const [savingManual, setSavingManual] = useState(false);
+
+  // ── AI自動提案（URL入力→対策プロンプト10選） ──
+  const [showSuggestPanel, setShowSuggestPanel] = useState(false);
+  const [suggestUrl, setSuggestUrl] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
+  const [registeringSuggestions, setRegisteringSuggestions] = useState(false);
+
+  const fetchRegisteredPrompts = () => {
+    fetch("/api/user/prompts")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.prompts)) setRegisteredPrompts(data.prompts);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchRegisteredPrompts();
+  }, []);
+
+  const promptCategories = ["すべて", ...Array.from(new Set(registeredPrompts.map((p) => p.category)))];
+  const filteredPrompts = categoryFilter === "すべて"
+    ? registeredPrompts
+    : registeredPrompts.filter((p) => p.category === categoryFilter);
+
+  const handleRegisterManualPrompt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPrompt.promptText.trim()) return;
+    setSavingManual(true);
+    try {
+      const res = await fetch("/api/user/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...manualPrompt, brandName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "登録に失敗しました。");
+      setManualPrompt({ promptText: "", category: "未分類", importance: "medium" });
+      setShowManualForm(false);
+      fetchRegisteredPrompts();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
+  const handleDeletePrompt = async (id: string) => {
+    if (!confirm("このプロンプトを削除しますか？")) return;
+    try {
+      const res = await fetch(`/api/user/prompts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "削除に失敗しました。");
+      setRegisteredPrompts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleScanRegisteredPrompt = (p: RegisteredPrompt) => {
+    setPrompt(p.prompt_text);
+    handleAnalyze(undefined, p.prompt_text, p.category);
+  };
+
+  const handleSuggestPrompts = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!suggestUrl) return;
+
+    if (!user) {
+      router.push(`/login?redirect=prompts`);
+      return;
+    }
+
+    setSuggesting(true);
+    setSuggestError(null);
+    setSuggestions([]);
+    setSelectedSuggestions(new Set());
+
+    try {
+      const res = await fetch("/api/suggest-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: suggestUrl, brandName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI提案の生成に失敗しました。");
+
+      setSuggestions(data.suggestions || []);
+      setSelectedSuggestions(new Set((data.suggestions || []).map((_: any, idx: number) => idx)));
+    } catch (err: any) {
+      setSuggestError(err.message);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const toggleSuggestion = (idx: number) => {
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const handleBulkRegisterSuggestions = async () => {
+    const selected = suggestions.filter((_, idx) => selectedSuggestions.has(idx));
+    if (selected.length === 0) return;
+
+    setRegisteringSuggestions(true);
+    try {
+      const res = await fetch("/api/user/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompts: selected, brandName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "一括登録に失敗しました。");
+
+      setSuggestions([]);
+      setSelectedSuggestions(new Set());
+      setShowSuggestPanel(false);
+      setSuggestUrl("");
+      fetchRegisteredPrompts();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setRegisteringSuggestions(false);
+    }
+  };
+
   // 認証状態の監視
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -108,13 +281,14 @@ function PromptsContent() {
       .catch(() => {});
   }, []);
 
-  const handleAnalyze = async (e?: React.FormEvent) => {
+  const handleAnalyze = async (e?: React.FormEvent, promptOverride?: string, categoryOverride?: string) => {
     if (e) e.preventDefault();
-    if (!prompt) return;
+    const targetPrompt = promptOverride ?? prompt;
+    if (!targetPrompt) return;
 
     // 未ログインの場合はログイン画面へ誘導
     if (!user) {
-      router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(prompt)}`);
+      router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(targetPrompt)}`);
       return;
     }
 
@@ -127,17 +301,18 @@ function PromptsContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
+          prompt: targetPrompt,
           brandName,
           competitors,
           targetLocale,
+          category: categoryOverride,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 401) {
-          router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(prompt)}`);
+          router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(targetPrompt)}`);
           return;
         }
         throw new Error(data.error || "解析に失敗しました。");
@@ -145,6 +320,7 @@ function PromptsContent() {
 
       setResult(data);
       fetchHistoryLogs();
+      fetchRegisteredPrompts();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -265,6 +441,238 @@ function PromptsContent() {
               <span>解析エラー</span>
             </div>
             <p className="pl-6 text-rose-700 leading-relaxed">{error}</p>
+          </div>
+        )}
+      </div>
+
+      {/* プロンプト管理（カテゴリ別・重要度管理）＆ AI自動提案 */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+            <ListChecks className="w-4 h-4 text-indigo-600" />
+            <span>登録プロンプト管理</span>
+            <span className="text-xs text-slate-400 font-normal">({registeredPrompts.length}件登録中)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSuggestPanel((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              <span>URLからAI提案（10選）</span>
+            </button>
+            <button
+              onClick={() => setShowManualForm((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>手動で1件登録</span>
+            </button>
+          </div>
+        </div>
+
+        {/* AI自動提案パネル */}
+        {showSuggestPanel && (
+          <div className="bg-violet-50/60 border border-violet-200 rounded-xl p-4 space-y-3">
+            <div className="text-xs text-violet-900 font-bold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              自社サイトURLを入力すると、AIが対策プロンプトを10個自動提案します
+            </div>
+            <form onSubmit={handleSuggestPrompts} className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="url"
+                value={suggestUrl}
+                onChange={(e) => setSuggestUrl(e.target.value)}
+                placeholder="https://your-company.com"
+                required
+                className="flex-1 px-3.5 py-2.5 bg-white border border-violet-200 rounded-xl text-xs focus:ring-2 focus:ring-violet-500 focus:outline-hidden"
+              />
+              <button
+                type="submit"
+                disabled={suggesting}
+                className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-400 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              >
+                {suggesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                <span>{suggesting ? "サイト解析中..." : "AI提案を生成"}</span>
+              </button>
+            </form>
+
+            {suggestError && (
+              <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3">{suggestError}</div>
+            )}
+
+            {suggestions.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-violet-200/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-violet-900">
+                    提案されたプロンプト（{selectedSuggestions.size}/{suggestions.length}件選択中）
+                  </span>
+                  <button
+                    onClick={handleBulkRegisterSuggestions}
+                    disabled={registeringSuggestions || selectedSuggestions.size === 0}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
+                  >
+                    {registeringSuggestions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    <span>選択した{selectedSuggestions.size}件を一括登録</span>
+                  </button>
+                </div>
+                <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                  {suggestions.map((s, idx) => (
+                    <label
+                      key={idx}
+                      className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors text-xs ${
+                        selectedSuggestions.has(idx) ? "bg-white border-violet-300" : "bg-white/50 border-violet-100"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSuggestions.has(idx)}
+                        onChange={() => toggleSuggestion(idx)}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200">
+                            {s.category}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${IMPORTANCE_STYLE[s.importance]}`}>
+                            重要度: {IMPORTANCE_LABEL[s.importance]}
+                          </span>
+                        </div>
+                        <p className="text-slate-800 font-medium leading-relaxed">{s.promptText}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 手動登録フォーム */}
+        {showManualForm && (
+          <form onSubmit={handleRegisterManualPrompt} className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 md:grid-cols-12 gap-3 text-xs">
+            <div className="md:col-span-6 space-y-1">
+              <label className="block font-bold text-slate-700">プロンプト文面 <span className="text-rose-500">*</span></label>
+              <input
+                type="text"
+                value={manualPrompt.promptText}
+                onChange={(e) => setManualPrompt({ ...manualPrompt, promptText: e.target.value })}
+                placeholder="例:「マニュアル作成ツール」と検索する人におすすめのツール名を3つ教えてください。"
+                required
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+              />
+            </div>
+            <div className="md:col-span-3 space-y-1">
+              <label className="block font-bold text-slate-700">カテゴリ</label>
+              <input
+                type="text"
+                value={manualPrompt.category}
+                onChange={(e) => setManualPrompt({ ...manualPrompt, category: e.target.value })}
+                placeholder="例: おすすめ系"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+              />
+            </div>
+            <div className="md:col-span-2 space-y-1">
+              <label className="block font-bold text-slate-700">重要度</label>
+              <select
+                value={manualPrompt.importance}
+                onChange={(e) => setManualPrompt({ ...manualPrompt, importance: e.target.value as PromptImportance })}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden"
+              >
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
+              </select>
+            </div>
+            <div className="md:col-span-1 flex items-end">
+              <button
+                type="submit"
+                disabled={savingManual}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold rounded-lg cursor-pointer"
+              >
+                {savingManual ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : "登録"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* カテゴリフィルタ */}
+        {registeredPrompts.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <Tag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            {promptCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                  categoryFilter === cat
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 登録済みプロンプト一覧テーブル */}
+        {filteredPrompts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3">カテゴリ</th>
+                  <th className="py-2.5 px-3">プロンプト文面</th>
+                  <th className="py-2.5 px-3">重要度</th>
+                  <th className="py-2.5 px-3">最終スキャン</th>
+                  <th className="py-2.5 px-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {filteredPrompts.map((p) => (
+                  <tr key={p.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200 whitespace-nowrap">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-medium max-w-md truncate" title={p.prompt_text}>
+                      {p.prompt_text}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${IMPORTANCE_STYLE[p.importance]}`}>
+                        {IMPORTANCE_LABEL[p.importance]}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                      {p.last_scanned_at ? new Date(p.last_scanned_at).toLocaleDateString("ja-JP") : "ー"}
+                    </td>
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1.5">
+                      <button
+                        onClick={() => handleScanRegisteredPrompt(p)}
+                        disabled={loading}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors text-[11px] cursor-pointer disabled:opacity-50"
+                      >
+                        今すぐスキャン
+                      </button>
+                      <button
+                        onClick={() => handleDeletePrompt(p.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        aria-label="削除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            まだプロンプトが登録されていません。「URLからAI提案」または「手動で1件登録」から追加してください。
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { runGeminiScan, buildScanPrompt, evaluateScan, DEFAULT_ENGINE } from "@/lib/scan-engine";
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,11 +46,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { 
-      prompt, 
-      brandName = "自社ブランド", 
+    const {
+      prompt,
+      brandName = "自社ブランド",
       competitors = [],
-      targetLocale = "ja"
+      targetLocale = "ja",
+      category = "未分類",
     } = await req.json();
 
     if (!prompt) {
@@ -62,74 +63,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-
-    // 4. ロケール別のSearch Grounding指示
-    let scanPrompt = "";
-    if (targetLocale === "zh-TW") {
-      scanPrompt = `請針對以下繁體中文搜尋詞，檢索最新台灣及香港地區之 Google 搜尋結果，並以 Google AI Overviews 方式輸出精準摘要、推薦品牌及關鍵引用來源：\n\n查詢詞: "${prompt}"`;
-    } else if (targetLocale === "en") {
-      scanPrompt = `Perform a live web search simulation for Google AI Overviews in the US market for the following commercial query. Provide comprehensive answers, brand recommendations, and key source citations:\n\nQuery: "${prompt}"`;
-    } else {
-      scanPrompt = `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`;
+    // プロジェクトの登録ドメイン（自社サイト直接引用の判定に使用）
+    let targetDomain = "";
+    if (orgObj) {
+      const { data: projectForDomain } = await supabase
+        .from("projects")
+        .select("domain")
+        .eq("organization_id", orgObj.id)
+        .limit(1)
+        .single();
+      targetDomain = projectForDomain?.domain || "";
     }
 
-    // Gemini 3.6 Flash (Grounding対応モデル) によるリアルタイムスキャン
-    let response: any;
-    try {
-      response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: scanPrompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          temperature: 0.2,
-        },
-      });
-    } catch (modelError) {
-      console.warn("Primary model gemini-3.6-flash failed, retrying with gemini-2.0-flash...", modelError);
-      response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: scanPrompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          temperature: 0.2,
-        },
-      });
-    }
+    const scanPrompt = buildScanPrompt(prompt, targetLocale);
+    const { text, webSources, searchQueries: groundedQueries } = await runGeminiScan(scanPrompt, apiKey);
 
-    const candidate = response.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text || "";
-
-    // 検索Groundingメタデータの抽出
-    const groundingMetadata = candidate?.groundingMetadata;
-    const searchChunks = groundingMetadata?.groundingChunks || [];
-    const webSources = searchChunks
-      .filter((chunk: any) => chunk.web?.uri)
-      .map((chunk: any) => ({
-        title: chunk.web.title || (targetLocale === "zh-TW" ? "引用來源網頁" : targetLocale === "en" ? "Cited Web Source" : "引用元ページ"),
-        url: chunk.web.uri,
-      }));
-
-    const searchQueries = groundingMetadata?.webSearchQueries || [
+    const searchQueries = groundedQueries.length > 0 ? groundedQueries : [
       `${prompt} ${targetLocale === "zh-TW" ? "費用" : targetLocale === "en" ? "pricing" : "費用"}`,
       `${prompt} ${targetLocale === "zh-TW" ? "優點" : targetLocale === "en" ? "benefits" : "メリット"}`,
       `${prompt} ${targetLocale === "zh-TW" ? "評比" : targetLocale === "en" ? "comparison" : "比較"}`,
     ];
 
-    const brandMentioned = text.toLowerCase().includes(brandName.toLowerCase());
-    const brandCited = webSources.some((s: any) => 
-      s.title.toLowerCase().includes(brandName.toLowerCase()) || 
-      s.url.toLowerCase().includes(brandName.toLowerCase())
-    );
+    // 共通エンジンでの評価（ATSスコア・順位推定・AIO表出状態・勝敗判定を一元計算）
+    const evaluation = evaluateScan({
+      targetBrand: brandName,
+      targetDomain,
+      competitors: Array.isArray(competitors) ? competitors : [],
+      scanText: text,
+      webSources,
+      searchQueries,
+    });
 
-    const competitorMentions: Record<string, boolean> = {};
-    if (Array.isArray(competitors)) {
-      competitors.forEach((comp: string) => {
-        if (comp) {
-          competitorMentions[comp] = text.toLowerCase().includes(comp.toLowerCase());
-        }
-      });
-    }
+    const { brandMentioned, brandCited, competitorMentions, rank, aioStatus, winLoss, ats } = evaluation;
 
     // 5. AIスキャン成功後のみ、アトミックにクレジットを消費してログ記録
     if (orgObj) {
@@ -168,6 +133,7 @@ export async function POST(req: NextRequest) {
             project_id: projectId,
             prompt_text: prompt,
             target_locale: targetLocale,
+            category,
             last_scanned_at: new Date().toISOString(),
           })
           .select("id")
@@ -178,13 +144,24 @@ export async function POST(req: NextRequest) {
             .from("prompt_analysis_logs")
             .insert({
               prompt_id: tp.id,
-              ai_overview_present: true,
+              ai_overview_present: aioStatus !== "not_shown",
               brand_mentioned: brandMentioned,
               brand_cited: brandCited,
               raw_response: text,
               fanout_queries: searchQueries,
               citation_sources: webSources,
               competitor_mentions: competitorMentions,
+              target_ats_score: ats.targetATS,
+              competitor_ats_scores: ats.competitorATSMap,
+              direct_mention_score: ats.targetBreakdown.directMentionScore,
+              citation_domain_score: ats.targetBreakdown.citationDomainScore,
+              fanout_coverage_score: ats.targetBreakdown.fanoutCoverageScore,
+              primary_source_type: ats.diagnosticAdvice.primary_source_type,
+              diagnostic_advice: ats.diagnosticAdvice,
+              engine: DEFAULT_ENGINE,
+              rank,
+              aio_status: aioStatus,
+              win_loss: winLoss,
             });
         }
       }
@@ -229,6 +206,15 @@ export async function POST(req: NextRequest) {
       competitorMentions,
       creditsRemaining,
       consultantAdvice,
+      rank,
+      aioStatus,
+      winLoss,
+      ats: {
+        targetATS: ats.targetATS,
+        breakdown: ats.targetBreakdown,
+        competitorATSMap: ats.competitorATSMap,
+        diagnosticAdvice: ats.diagnosticAdvice,
+      },
     });
   } catch (error: any) {
     console.error("Analysis API Error:", error);

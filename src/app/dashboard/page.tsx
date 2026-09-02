@@ -9,7 +9,8 @@ import {
   AlertCircle,
   ArrowRight,
   Bot,
-  Zap
+  Zap,
+  Target
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { ATSBenchmarkCard } from "@/components/ATSBenchmarkCard";
@@ -18,7 +19,28 @@ import { FanoutExplorerCard } from "@/components/FanoutExplorerCard";
 import { BeforeAfterTrackerCard } from "@/components/BeforeAfterTrackerCard";
 import { WhiteLabelReportModal } from "@/components/WhiteLabelReportModal";
 import { OutreachModal } from "@/components/OutreachModal";
+import { RecommendTrendChart } from "@/components/RecommendTrendChart";
 import { RecommendedAction } from "@/lib/ats-calculator";
+import type { DashboardStats } from "@/types/geo";
+
+const EMPTY_STATS: DashboardStats = {
+  hasScanData: false,
+  atsScore: null,
+  competitorTopAtsScore: null,
+  citationRate: null,
+  vsPromptWinRate: null,
+  avgRank: null,
+  domainCoverageRate: null,
+  trend: [],
+};
+
+function formatPct(v: number | null): string {
+  return v === null ? "ー" : `${Math.round(v * 100)}%`;
+}
+
+function formatRank(v: number | null): string {
+  return v === null ? "ー" : `${v}位`;
+}
 
 const DEFAULT_BRAND_NAME: Record<string, string> = {
   ja: "自社ブランド",
@@ -34,6 +56,7 @@ export default function DashboardPage() {
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10 });
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
 
   // モーダルのState管理
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -93,13 +116,23 @@ export default function DashboardPage() {
         if (!cancelled) setLoading(false);
       });
 
+    // 実測スキャンデータの集計取得（未計測時は hasScanData: false が返る）
+    fetch("/api/user/stats")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data && !data.error) setStats(data as DashboardStats);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to fetch stats:", err);
+      });
+
     return () => { cancelled = true; };
   }, []);
 
   // ブランド名が未設定の間だけ、言語に応じたプレースホルダーを表示する（再フェッチはしない）
   const displayBrandName = brandName === "自社ブランド" ? (DEFAULT_BRAND_NAME[lang] ?? DEFAULT_BRAND_NAME.ja) : brandName;
-
-  const citationRate = credits.used > 0 ? 25 : 0;
 
   const dynamicAdvice = useMemo(() => ({
     primary_source_type: 'specialized_and_comparison' as const,
@@ -201,8 +234,34 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 3 Core KPI Metrics */}
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity ${loading ? 'opacity-60 animate-pulse' : 'opacity-100'}`}>
+      {/* 未計測（プロンプト未登録・スキャン未実行）誘導バナー: ATS等がゼロ埋め表示になる不具合の代替 */}
+      {!loading && !stats.hasScanData && (
+        <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="flex items-start gap-3">
+            <span className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0">
+              <Target className="w-5 h-5" />
+            </span>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-amber-900">
+                まだ計測データがありません（下の指標はすべて「ー」）
+              </h3>
+              <p className="text-xs text-amber-800 leading-relaxed max-w-xl">
+                ATS・被引用率・推奨順位などは、対策プロンプトを登録して最初のスキャンを実行すると自動算出されます。まずは1件登録してみましょう。
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/prompts"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>プロンプトを登録して初回スキャン</span>
+          </Link>
+        </div>
+      )}
+
+      {/* KPIメトリクス: 実測データがない指標は根拠のない数値を出さず「ー」を表示する */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity ${loading ? 'opacity-60 animate-pulse' : 'opacity-100'}`}>
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
             <span>自社 AI-Trust Score (ATS)</span>
@@ -211,10 +270,12 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="text-3xl font-black text-indigo-600 tracking-tight">
-            {credits.used > 0 ? 42 : 0} <span className="text-sm font-normal text-slate-400">/ 100 pt</span>
+            {stats.atsScore === null ? "ー" : stats.atsScore} <span className="text-sm font-normal text-slate-400">/ 100 pt</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            {credits.used > 0 ? "競合最高(78pt)とのギャップ: -36pt ⚠️" : "プロンプトスキャン後に自動算出"}
+            {stats.atsScore !== null && stats.competitorTopAtsScore !== null
+              ? `競合最高(${stats.competitorTopAtsScore}pt)とのギャップ: ${stats.atsScore - stats.competitorTopAtsScore >= 0 ? "+" : ""}${stats.atsScore - stats.competitorTopAtsScore}pt`
+              : "プロンプトスキャン後に自動算出"}
           </p>
         </div>
 
@@ -226,10 +287,10 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="text-3xl font-black text-emerald-600 tracking-tight">
-            {citationRate}%
+            {formatPct(stats.citationRate)}
           </div>
           <p className="text-[11px] text-slate-400">
-            {credits.used > 0 ? "Google AIO ソースリンクへの掲載率" : t.dash_kpi_citations_desc}
+            {stats.citationRate !== null ? "Google AIO ソースリンクへの掲載率" : t.dash_kpi_citations_desc}
           </p>
         </div>
 
@@ -245,19 +306,72 @@ export default function DashboardPage() {
             {t.dash_kpi_credits_desc} {credits.used} pt
           </p>
         </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>VSプロンプト勝率</span>
+            <span className="text-violet-600 bg-violet-50 px-2 py-0.5 rounded text-[10px] font-bold">対競合</span>
+          </div>
+          <div className="text-3xl font-black text-violet-600 tracking-tight">
+            {formatPct(stats.vsPromptWinRate)}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            同一プロンプトで自社のみ言及された割合
+          </p>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>平均順位</span>
+            <span className="text-sky-600 bg-sky-50 px-2 py-0.5 rounded text-[10px] font-bold">推奨順位</span>
+          </div>
+          <div className="text-3xl font-black text-sky-600 tracking-tight">
+            {formatRank(stats.avgRank)}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            AI回答内で自社が紹介された平均順位
+          </p>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>参照ドメインカバー率</span>
+            <span className="text-teal-600 bg-teal-50 px-2 py-0.5 rounded text-[10px] font-bold">GRC</span>
+          </div>
+          <div className="text-3xl font-black text-teal-600 tracking-tight">
+            {formatPct(stats.domainCoverageRate)}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            スキャン済プロンプトのうち自社が参照された割合
+          </p>
+        </div>
       </div>
+
+      {/* GRC型週次推移グラフ */}
+      <RecommendTrendChart trend={stats.trend} />
 
       {/* ATS Benchmark & Dynamic Advice Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <ATSBenchmarkCard
             targetBrand={displayBrandName}
-            data={[
-              { brandName: displayBrandName, isTarget: true, atsScore: 42, directScore: 15, citationScore: 15, fanoutScore: 12 },
-              { brandName: competitors[0] || '競合A社', isTarget: false, atsScore: 78, directScore: 35, citationScore: 28, fanoutScore: 15 },
-              { brandName: competitors[1] || '競合B社', isTarget: false, atsScore: 65, directScore: 28, citationScore: 22, fanoutScore: 15 }
-            ]}
-            gapDiagnosis="自社は「一次情報ソース露出度」で競合A社に13ptの差をつけられています。主要比較メディアへの掲載が不十分です。"
+            data={
+              stats.hasScanData && stats.atsScore !== null && stats.atsBreakdown
+                ? [
+                    {
+                      brandName: displayBrandName,
+                      isTarget: true,
+                      atsScore: stats.atsScore,
+                      directScore: stats.atsBreakdown.directMentionScore,
+                      citationScore: stats.atsBreakdown.citationDomainScore,
+                      fanoutScore: stats.atsBreakdown.fanoutCoverageScore,
+                    },
+                    ...(stats.competitorTopAtsScore !== null
+                      ? [{ brandName: competitors[0] || '競合最高値', isTarget: false, atsScore: stats.competitorTopAtsScore, directScore: 0, citationScore: 0, fanoutScore: 0 }]
+                      : []),
+                  ]
+                : []
+            }
             onExplorePrompts={handleOpenReport}
             exploreButtonLabel={isAgencyPlan ? "詳細レポートを出力" : "詳細レポートを見る (Agencyプラン)"}
           />
@@ -350,7 +464,7 @@ export default function DashboardPage() {
         targetBrand={displayBrandName}
         targetDomain={domain}
         competitors={competitors}
-        atsScore={42}
+        atsScore={stats.atsScore ?? 0}
       />
 
       <OutreachModal

@@ -36,7 +36,12 @@ create table if not exists public.tracked_prompts (
     target_locale text not null default 'ja-JP',
     check_frequency text not null default 'weekly' check (check_frequency in ('daily', 'weekly', 'manual')),
     last_scanned_at timestamp with time zone,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    -- 実務モニタリング（プロンプト設定シート）対応: カテゴリ別・検索意図・重要度管理
+    category text not null default '未分類',
+    search_intent text,
+    importance text not null default 'medium' check (importance in ('high', 'medium', 'low')),
+    keyword text
 );
 
 -- 4. 解析ログテーブル
@@ -55,7 +60,32 @@ create table if not exists public.prompt_analysis_logs (
     competitor_ats_scores jsonb default '{}'::jsonb,
     primary_source_type text,
     diagnostic_advice jsonb default '{}'::jsonb,
-    scanned_at timestamp with time zone default timezone('utc'::text, now()) not null
+    scanned_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    -- GRC型週次モニタリング対応: エンジン別順位・AIO表出状態・勝敗判定
+    engine text not null default 'gemini' check (engine in ('gemini', 'chatgpt', 'ai_mode', 'perplexity')),
+    rank integer,
+    direct_mention_score integer,
+    citation_domain_score integer,
+    fanout_coverage_score integer,
+    -- not_shown: AIO非表出（未検索と誤解されないよう明示区別）/ shown_not_recommended: 表出したが非推奨 / shown_recommended: 表出かつ推奨
+    aio_status text not null default 'not_shown' check (aio_status in ('not_shown', 'shown_not_recommended', 'shown_recommended')),
+    win_loss text check (win_loss in ('win', 'loss', 'draw', 'not_applicable'))
+);
+
+-- 4b. 参照ドメインデータテーブル（GRC型ドメイン引用モニタリング）
+create table if not exists public.domain_citations (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    domain text not null,
+    media_name text,
+    citation_count integer not null default 0,
+    our_listed boolean not null default false,
+    domain_rating integer,
+    action_note text,
+    category text,
+    last_seen_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (project_id, domain)
 );
 
 -- 5. AEO記事テーブル
@@ -79,6 +109,7 @@ alter table public.projects enable row level security;
 alter table public.tracked_prompts enable row level security;
 alter table public.prompt_analysis_logs enable row level security;
 alter table public.aeo_articles enable row level security;
+alter table public.domain_citations enable row level security;
 
 create policy "organizations_policy" on public.organizations
     for all using (auth.uid() = user_id);
@@ -108,6 +139,15 @@ create policy "prompt_analysis_logs_policy" on public.prompt_analysis_logs
     );
 
 create policy "aeo_articles_policy" on public.aeo_articles
+    for all using (
+        project_id in (
+            select p.id from public.projects p
+            join public.organizations o on p.organization_id = o.id
+            where o.user_id = auth.uid()
+        )
+    );
+
+create policy "domain_citations_policy" on public.domain_citations
     for all using (
         project_id in (
             select p.id from public.projects p
