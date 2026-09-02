@@ -388,6 +388,7 @@ export default function DashboardPage() {
 
       {/* 【機能 1】 Before / After 成果自動トラッカー (解約率低減) */}
       <BeforeAfterTrackerCard
+        isExample={true}
         items={[
           {
             id: '1',

@@ -15,24 +15,30 @@ export interface TrackerItem {
 
 interface BeforeAfterTrackerCardProps {
   items: TrackerItem[];
+  isExample?: boolean;
   onReScan?: (id: string) => void;
 }
 
-export function BeforeAfterTrackerCard({ items, onReScan }: BeforeAfterTrackerCardProps) {
+export function BeforeAfterTrackerCard({ items, isExample = false, onReScan }: BeforeAfterTrackerCardProps) {
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-5">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-5 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div>
           <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs tracking-wider uppercase mb-1">
             <TrendingUp className="w-4 h-4 text-emerald-600" />
             Closed-Loop ROI Tracker
+            {isExample && (
+              <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-2 py-0.5 rounded font-black tracking-normal uppercase ml-1">
+                ※ 表示例（サンプルデータ）
+              </span>
+            )}
           </div>
-          <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+          <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
             Before / After 成果自動トラッカー（対策効果測定）
           </h3>
         </div>
         <span className="text-[11px] bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold border border-emerald-200 self-start sm:self-auto">
-          全 {items.length} 件の対策記事を定点観測中
+          {isExample ? "サンプルデータ表示中" : `全 ${items.length} 件の対策記事を定点観測中`}
         </span>
       </div>
 
@@ -41,8 +47,11 @@ export function BeforeAfterTrackerCard({ items, onReScan }: BeforeAfterTrackerCa
       </p>
 
       {items.length === 0 ? (
-        <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-          まだ計測中の対策記事がありません。AEO記事を公開すると、ここに効果測定結果が表示されます。
+        <div className="py-10 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+          <div className="text-sm font-bold text-slate-700">まだ計測中の対策記事がありません</div>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            AEO直答記事を生成して公開・定点モニタリングを開始すると、ここに対策前後のATSスコア向上成果（Before / After）が自動集計されます。
+          </p>
         </div>
       ) : (
       <div className="space-y-3">
