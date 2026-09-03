@@ -22,7 +22,8 @@ import {
   Plus,
   Trash2,
   Wand2,
-  Tag
+  Tag,
+  Info
 } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
@@ -100,6 +101,7 @@ function PromptsContent() {
       citationSources: log.citationSources || [],
       competitorMentions: {},
       creditsRemaining: 10,
+      rank: log.rank || null,
     });
     // スクロール移動
     window.scrollTo({ top: 400, behavior: "smooth" });
@@ -116,6 +118,7 @@ function PromptsContent() {
 
   // ── AI自動提案（URL入力→対策プロンプト10選） ──
   const [showSuggestPanel, setShowSuggestPanel] = useState(false);
+  const [projectDomain, setProjectDomain] = useState("");
   const [suggestUrl, setSuggestUrl] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -180,30 +183,21 @@ function PromptsContent() {
     handleAnalyze(undefined, p.prompt_text, p.category);
   };
 
-  const handleSuggestPrompts = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!suggestUrl) return;
-
-    if (!user) {
-      router.push(`/login?redirect=prompts`);
-      return;
-    }
-
+  const handleSuggestPrompts = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!suggestUrl.trim()) return;
     setSuggesting(true);
     setSuggestError(null);
-    setSuggestions([]);
-    setSelectedSuggestions(new Set());
-
     try {
       const res = await fetch("/api/suggest-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: suggestUrl, brandName }),
+        body: JSON.stringify({ url: suggestUrl.trim(), brandName }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "AI提案の生成に失敗しました。");
-
+      if (!res.ok) throw new Error(data.error || "プロンプトの自動提案に失敗しました。");
       setSuggestions(data.suggestions || []);
+      // デフォルトで全選択
       setSelectedSuggestions(new Set((data.suggestions || []).map((_: any, idx: number) => idx)));
     } catch (err: any) {
       setSuggestError(err.message);
@@ -212,11 +206,11 @@ function PromptsContent() {
     }
   };
 
-  const toggleSuggestion = (idx: number) => {
+  const toggleSuggestion = (index: number) => {
     setSelectedSuggestions((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
       return next;
     });
   };
@@ -238,7 +232,7 @@ function PromptsContent() {
       setSuggestions([]);
       setSelectedSuggestions(new Set());
       setShowSuggestPanel(false);
-      setSuggestUrl("");
+      if (projectDomain) setSuggestUrl(projectDomain);
       fetchRegisteredPrompts();
     } catch (err: any) {
       alert(err.message);
@@ -266,7 +260,7 @@ function PromptsContent() {
     setTargetLocale(lang);
   }, [lang]);
 
-  // DBからプロジェクト設定を取得
+  // DBからプロジェクト設定を取得（自社URLの自動補完・ガード付き）
   useEffect(() => {
     fetch("/api/user/project")
       .then((res) => res.json())
@@ -275,6 +269,10 @@ function PromptsContent() {
           if (data.project.name) setBrandName(data.project.name);
           if (Array.isArray(data.project.competitors)) {
             setCompetitors(data.project.competitors);
+          }
+          if (data.project.domain && !data.project.domain.includes("example.com")) {
+            setProjectDomain(data.project.domain);
+            setSuggestUrl(data.project.domain);
           }
         }
       })
@@ -455,7 +453,15 @@ function PromptsContent() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowSuggestPanel((v) => !v)}
+              onClick={() => {
+                setShowSuggestPanel((v) => {
+                  const next = !v;
+                  if (next && !suggestUrl && projectDomain) {
+                    setSuggestUrl(projectDomain);
+                  }
+                  return next;
+                });
+              }}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
             >
               <Wand2 className="w-3.5 h-3.5" />
@@ -684,8 +690,8 @@ function PromptsContent() {
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
           <div className="space-y-1">
-            <h3 className="font-bold text-sm text-slate-900">Google AI Overviews (Gemini) スキャン中...</h3>
-            <p className="text-xs text-slate-400">最新ウェブインデックスからの言及・引用ソースおよび内部展開クエリ(fan-out)を解析しています</p>
+            <h3 className="font-bold text-sm text-slate-900">Gemini（Googleウェブ検索連携）リアルタイムスキャン中...</h3>
+            <p className="text-xs text-slate-400">最新ウェブインデックスからの言及順位・引用ソースおよび内部展開クエリ(fan-out)を解析しています</p>
           </div>
         </div>
       )}
@@ -698,7 +704,7 @@ function PromptsContent() {
             <div className="flex justify-between items-end">
               <div>
                 <span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">GEO Explorer Official Report</span>
-                <h1 className="text-2xl font-black text-slate-900 mt-1">Google AI Overviews / Gemini 露出診断 ＆ 改善処方箋レポート</h1>
+                <h1 className="text-2xl font-black text-slate-900 mt-1">Gemini / GEO 露出診断 ＆ 改善処方箋レポート</h1>
               </div>
               <div className="text-right text-xs text-slate-500 font-mono">
                 発行日: {new Date().toLocaleDateString("ja-JP")}
@@ -715,16 +721,32 @@ function PromptsContent() {
             <div className="bg-emerald-50/70 text-slate-900 p-5 rounded-2xl border border-emerald-200/90 shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-widest bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
-                  ① AI認知・ポジショニング評価
+                  ① AI言及・ランキング順位
                 </span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                {result.rank ? (
+                  <span className="text-xs font-black bg-emerald-600 text-white px-2.5 py-0.5 rounded-md shadow-2xs">
+                    第 {result.rank} 位
+                  </span>
+                ) : result.brandMentioned ? (
+                  <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-md">
+                    言及あり（順位圏外）
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md">
+                    圏外・言及なし
+                  </span>
+                )}
               </div>
               <h4 className="text-xs font-bold text-emerald-950">
-                狙いたいKWの認知・方向性は間違っていません
+                {result.rank
+                  ? `AI回答内でおすすめ「第 ${result.rank} 位」にランクインしています`
+                  : result.brandMentioned
+                  ? "AI回答内でブランドが言及されています"
+                  : "AI回答内で未言及（要順位改善対策）"}
               </h4>
               <p className="text-[11px] text-slate-700 leading-relaxed">
                 {result.brandMentioned
-                  ? `AIのナレッジ空間で「${result.brandName}」が主要な関連キーワードとして正しく認知・露出されています。`
+                  ? `AIのナレッジ空間で「${result.brandName}」が主要な関連サービスとして正しく認知・露出されています。`
                   : `ブランド「${result.brandName}」はAI回答内で十分認知されていません。「${result.prompt}」に関連する自社の強みをAIに学ばせるコンテンツ強化が必要です。`}
               </p>
             </div>
@@ -769,73 +791,36 @@ function PromptsContent() {
             </div>
           </div>
 
-          {/* 4 Action Pillars Card (清潔感溢れる淡色インディゴグラデーションデザイン) */}
-          <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-purple-50/60 rounded-3xl p-6 sm:p-8 text-slate-900 shadow-sm border border-indigo-200/80 space-y-6 relative overflow-hidden">
-            <div className="flex items-center justify-between border-b border-indigo-200/60 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-widest bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200/80">
-                    GEO / LLMO 対策処方箋
-                  </span>
-                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight mt-0.5">
-                    📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
-                  </h3>
+          {/* 
+            【Phase 2 送り】4 Action Pillars Card (Dai君FB対応: 静的固定文言のため一旦非表示化)
+            ※ Phase 2 実装時に、裏側で計算済みの動的 consultantAdvice (analyze/route.ts) と配線して再有効化予定
+          */}
+          {false && (
+            <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-purple-50/60 rounded-3xl p-6 sm:p-8 text-slate-900 shadow-sm border border-indigo-200/80 space-y-6 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-indigo-200/60 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-widest bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200/80">
+                      GEO / LLMO 対策処方箋
+                    </span>
+                    <h3 className="text-lg font-extrabold text-slate-900 tracking-tight mt-0.5">
+                      📋 LLMO/AIO対策の4大コンサルティング・アクションプラン
+                    </h3>
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
-                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
-                  <span>1. AI「おすすめソリューション・パートナー枠」対策</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
-                  推薦セクションで自社の社名が選ばれるよう、解決できる課題・強み・導入効果を具体化した構造化コンテンツを配置します。
-                </p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
-                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
-                  <span>2. 自社サイト(URL)からの直接参照（Web Card）奪還</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
-                  他社メディアが独占している参照枠を取り戻すため、見出しのQ&A化と直後の結論（即答文章）をドメイン内に配置します。
-                </p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
-                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
-                  <span>3. JSON-LD構造化データによるセマンティック強化</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
-                  自社サイトに「JSON-LD (Organization, FAQPage)」を導入し、AIクローラーが専門性を正しく解析できる構造を徹底します。
-                </p>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs space-y-1.5">
-                <div className="font-bold text-slate-900 text-xs flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
-                  <span>4. 外部サイテーション露出の最大化</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed pl-7">
-                  業界比較DB、PR TIMES等への出稿により、AIが重要視する外部メディアからの言及（サイテーション）を獲得します。
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* AI Response Text Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
                 <Sparkles className="w-4 h-4 text-indigo-600" />
-                Google AI Overviews / Gemini リアルタイムスキャン回答
+                Gemini リアルタイムスキャン回答（Google Search Grounding）
               </div>
               <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-2 py-0.5 rounded border border-slate-200">
                 Search Grounded Response
@@ -865,6 +850,15 @@ function PromptsContent() {
                 </div>
               </div>
             )}
+
+            {/* 測定方法論・開示事項（BtoBコンサルティング信頼性担保） */}
+            <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed flex items-start gap-2.5 mt-4">
+              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-slate-800">【測定方法論・客観的開示事項】</strong>
+                本スキャンはGoogle公式のAI Overviews検索結果を模したスクレイピングではなく、Google最新検索インデックスを直接参照するGoogle Search Grounding（ウェブ検索連携）を搭載したGeminiモデルによるリアルタイム実測評価・代替指標です。AIが自社や競合をどのようにナレッジとして保持・順位付けして推薦しているかを客観的に可視化しています。
+              </div>
+            </div>
           </div>
 
           {/* Citation Sources Card */}

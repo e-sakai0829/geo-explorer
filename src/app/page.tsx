@@ -18,15 +18,18 @@ import {
   Trophy,
   AlertTriangle,
   Menu,
-  X
+  X,
+  MessageSquare
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { Language } from "@/lib/i18n";
+import ConsultingModal from "@/components/ConsultingModal";
 
 export default function LandingPage() {
   const { lang, setLang } = useLanguage();
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isConsultingOpen, setIsConsultingOpen] = useState(false);
 
   const languages: { code: Language; name: string; flag: string }[] = [
     { code: "ja", name: "日本語", flag: "🇯🇵" },
@@ -58,11 +61,18 @@ export default function LandingPage() {
             </div>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-600">
+          <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600">
             <a href="#problems" className="hover:text-indigo-600 transition-colors">お悩み解決</a>
             <a href="#features" className="hover:text-indigo-600 transition-colors">機能一覧</a>
             <a href="#comparison" className="hover:text-indigo-600 transition-colors">他ツール比較</a>
             <a href="#pricing" className="hover:text-indigo-600 transition-colors">料金プラン</a>
+            <button
+              onClick={() => setIsConsultingOpen(true)}
+              className="text-indigo-600 font-bold hover:text-indigo-800 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span>個別コンサル相談</span>
+            </button>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -99,6 +109,15 @@ export default function LandingPage() {
                 </div>
               )}
             </div>
+
+            {/* コンサルティング相談ボタン */}
+            <button
+              onClick={() => setIsConsultingOpen(true)}
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+              <span>コンサル相談</span>
+            </button>
 
             <Link
               href="/login"
@@ -139,6 +158,16 @@ export default function LandingPage() {
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="py-2.5 hover:text-indigo-600 transition-colors">機能一覧</a>
             <a href="#comparison" onClick={() => setMobileMenuOpen(false)} className="py-2.5 hover:text-indigo-600 transition-colors">他ツール比較</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="py-2.5 hover:text-indigo-600 transition-colors">料金プラン</a>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setIsConsultingOpen(true);
+              }}
+              className="py-2.5 text-left text-indigo-600 font-bold hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4 text-indigo-600" />
+              <span>個別コンサル相談・お問い合わせ</span>
+            </button>
             <Link href="/insights" onClick={() => setMobileMenuOpen(false)} className="py-2.5 hover:text-indigo-600 transition-colors">ナレッジ</Link>
 
             <div className="flex items-center flex-wrap gap-2 pt-3 mt-2 border-t border-slate-100">
@@ -614,6 +643,12 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Consulting Modal */}
+      <ConsultingModal
+        isOpen={isConsultingOpen}
+        onClose={() => setIsConsultingOpen(false)}
+      />
 
       {/* Footer */}
       <footer className="bg-slate-950 text-slate-400 py-12 px-6 text-xs border-t border-slate-800">

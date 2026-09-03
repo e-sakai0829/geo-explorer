@@ -6,7 +6,8 @@ import Sidebar from "@/components/Sidebar";
 import CookieBanner from "@/components/CookieBanner";
 import { LanguageProvider, useLanguage } from "@/context/LanguageContext";
 import { Language } from "@/lib/i18n";
-import { ChevronDown, Globe, Check, RefreshCw } from "lucide-react";
+import { ChevronDown, Globe, Check, RefreshCw, MessageSquare } from "lucide-react";
+import ConsultingModal from "@/components/ConsultingModal";
 
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -21,6 +22,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [projectName, setProjectName] = useState("自社ブランド");
   const [projectDomain, setProjectDomain] = useState("https://example.com");
+  const [isConsultingOpen, setIsConsultingOpen] = useState(false);
   const [credits, setCredits] = useState({ total: 10, used: 0, remaining: 10 });
 
   const fetchCredits = () => {
@@ -146,6 +148,17 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
             <span className="text-slate-300">|</span>
 
+            {/* マーケティングコンサルティング相談 CTA ボタン */}
+            <button
+              onClick={() => setIsConsultingOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer shadow-2xs hover:border-indigo-300"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+              <span>コンサル相談</span>
+            </button>
+
+            <span className="text-slate-300">|</span>
+
             <span className="text-slate-500">
               {lang === "zh-TW" ? "剩餘額度: " : lang === "en" ? "Credits: " : "残り枠: "}
               <strong className="text-slate-800">{credits.remaining} / {credits.total} クエリ</strong>
@@ -156,6 +169,12 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
         {/* Main App Content */}
         <main className="flex-1 p-8 overflow-y-auto">{children}</main>
       </div>
+      <ConsultingModal
+        isOpen={isConsultingOpen}
+        onClose={() => setIsConsultingOpen(false)}
+        defaultDomain={projectDomain !== "https://example.com" ? projectDomain : ""}
+        defaultBrandName={projectName !== "自社ブランド" ? projectName : ""}
+      />
       <CookieBanner />
     </div>
   );

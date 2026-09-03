@@ -17,6 +17,7 @@ import {
   LogOut,
   User
 } from "lucide-react";
+import ConsultingModal from "@/components/ConsultingModal";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -25,7 +26,9 @@ export default function Sidebar() {
   const { lang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("マイプロジェクト");
+  const [projectDomain, setProjectDomain] = useState<string>("");
   const [planName, setPlanName] = useState<string>("Starter");
+  const [isConsultingOpen, setIsConsultingOpen] = useState(false);
   const [credits, setCredits] = useState<{ total: number; used: number; remaining: number }>({
     total: 10,
     used: 0,
@@ -99,6 +102,9 @@ export default function Sidebar() {
         if (data?.project?.name) {
           setProjectName(data.project.name);
         }
+        if (data?.project?.domain && !data.project.domain.includes("example.com")) {
+          setProjectDomain(data.project.domain);
+        }
       })
       .catch(() => {});
   }, [supabase]);
@@ -164,7 +170,36 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {/* マーケティングコンサルティング相談 CTA */}
+        <div className="pt-3 px-1">
+          <div className="p-3 bg-gradient-to-br from-indigo-900 to-slate-900 rounded-xl text-white shadow-md border border-indigo-500/20 space-y-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-300 tracking-wider uppercase">
+              <Sparkles className="w-3 h-3 text-indigo-400" />
+              <span>個別伴走コンサル</span>
+            </div>
+            <p className="text-[11px] font-bold text-white leading-snug">
+              マーケティング戦略・GEO改善のご相談
+            </p>
+            <p className="text-[10px] text-slate-300 leading-normal">
+              自社のAI検索露出向上・一次情報設計をプロが支援
+            </p>
+            <button
+              onClick={() => setIsConsultingOpen(true)}
+              className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+            >
+              <span>無料相談はこちら</span>
+            </button>
+          </div>
+        </div>
       </nav>
+
+      <ConsultingModal
+        isOpen={isConsultingOpen}
+        onClose={() => setIsConsultingOpen(false)}
+        defaultDomain={projectDomain}
+        defaultBrandName={projectName !== "マイプロジェクト" ? projectName : ""}
+      />
 
       {/* Credit & User Footer (DB実データ連携) */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/60">

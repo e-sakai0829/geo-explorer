@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     // 各プロンプトの最新ログを取得
     const { data: logs } = await supabase
       .from("prompt_analysis_logs")
-      .select("id, prompt_id, brand_mentioned, brand_cited, raw_response, created_at, fanout_queries, citation_sources")
+      .select("id, prompt_id, brand_mentioned, brand_cited, raw_response, created_at, fanout_queries, citation_sources, rank")
       .in("prompt_id", promptIds)
       .order("created_at", { ascending: false });
 
@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
         rawResponse: log ? log.raw_response : "",
         fanoutQueries: log ? log.fanout_queries : [],
         citationSources: log ? log.citation_sources : [],
+        rank: log?.rank ?? null,
       };
     });
 

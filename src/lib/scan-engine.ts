@@ -210,12 +210,12 @@ export function evaluateScan(input: ScanEvaluationInput): ScanEvaluationResult {
 
 export function buildScanPrompt(prompt: string, targetLocale: string): string {
   if (targetLocale === "zh-TW") {
-    return `請針對以下繁體中文搜尋詞，檢索最新台灣及香港地區之 Google 搜尋結果，並以 Google AI Overviews 方式輸出精準摘要、推薦品牌及關鍵引用來源：\n\n查詢詞: "${prompt}"`;
+    return `請針對以下繁體中文商務搜尋詞，結合即時 Google 搜尋結果，提供客觀專業的比較排名、推薦品牌清單（附帶推薦理由）及關鍵引用來源：\n\n查詢詞: "${prompt}"`;
   }
   if (targetLocale === "en") {
-    return `Perform a live web search simulation for Google AI Overviews in the US market for the following commercial query. Provide comprehensive answers, brand recommendations, and key source citations:\n\nQuery: "${prompt}"`;
+    return `Perform an authoritative web search analysis using Google Search grounding for the following commercial query. Provide ranked brand recommendations (with specific reasons), comparative highlights, and key source citations:\n\nQuery: "${prompt}"`;
   }
-  return `以下のBtoB検索クエリについて、最新のウェブ検索情報を踏まえてGoogle AI Overviews相当の総合的な回答と推薦を行ってください。\n\nクエリ: "${prompt}"`;
+  return `以下の商用・BtoB検索クエリについて、Googleウェブ検索連携（Grounding）を踏まえて最新の市場実態を反映した客観的な比較・ランキング解説（おすすめ上位企業/サービスと選定理由）、および引用元URLを提示してください。\n\nクエリ: "${prompt}"`;
 }
 
 export const DEFAULT_ENGINE: LLMEngine = "gemini";

@@ -154,38 +154,41 @@ export default function CitationsPage() {
         </h1>
         <p className="text-xs text-slate-500 mt-1">
           {lang === "zh-TW"
-            ? "即時分析指定業界與關鍵字中 Google AI Overviews 最常引用的權威媒體與競品來源"
+            ? "即時分析指定業界與關鍵字中 Gemini（Google 搜尋聯動）最常引用的權威媒體與競品來源"
             : lang === "en"
-            ? "Analyze real-time authoritative web media and domains cited by Google AI Overviews for your specific industry."
-            : "業界・キーワードごとに Google AI Overviews / Gemini が実際に信頼・参照している動的なWebメディア・ドメインをリアルタイム解析します"}
+            ? "Analyze real-time authoritative web media and domains cited by Gemini (Google Search Grounding) for your specific industry."
+            : "業界・キーワードごとに Gemini（Googleウェブ検索連携）が実際に信頼・参照している動的なWebメディア・ドメインをリアルタイム解析します"}
         </p>
       </div>
 
       {/* 業界・プロンプト動的検索＆過去ログ切替バー */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-indigo-600" />
-            <h3 className="text-sm font-bold text-slate-900">
+          <div className="flex items-center gap-2 min-w-0">
+            <Filter className="w-4 h-4 text-indigo-600 shrink-0" />
+            <h3 className="text-sm font-bold text-slate-900 truncate">
               {lang === "zh-TW" ? "🔍 業界與目標關鍵字動的切換" : lang === "en" ? "🔍 Industry Query & Dynamic Filter" : "🔍 業界・ターゲットプロンプトのリアルタイムスキャン"}
             </h3>
           </div>
 
           {pastLogs.length > 0 && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400">{lang === "zh-TW" ? "過去掃描紀錄:" : lang === "en" ? "Past Scans:" : "過去の調査キーワード:"}</span>
+            <div className="flex items-center gap-2 text-xs shrink-0 max-w-full sm:max-w-[480px]">
+              <span className="text-slate-400 shrink-0">{lang === "zh-TW" ? "過去掃描紀錄:" : lang === "en" ? "Past Scans:" : "過去の調査キーワード:"}</span>
               <select
                 onChange={(e) => {
                   const selected = pastLogs.find((l) => l.id === e.target.value);
                   if (selected) handleSelectPastLog(selected);
                 }}
-                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-hidden cursor-pointer"
+                className="w-full sm:max-w-[320px] px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-hidden cursor-pointer truncate"
               >
-                {pastLogs.map((log) => (
-                  <option key={log.id} value={log.id}>
-                    {log.prompt} ({new Date(log.date).toLocaleDateString("ja-JP")})
-                  </option>
-                ))}
+                {pastLogs.map((log) => {
+                  const displayPrompt = log.prompt.length > 40 ? `${log.prompt.slice(0, 40)}...` : log.prompt;
+                  return (
+                    <option key={log.id} value={log.id} title={log.prompt}>
+                      {displayPrompt} ({new Date(log.date).toLocaleDateString("ja-JP")})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -267,10 +270,10 @@ export default function CitationsPage() {
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               {lang === "zh-TW" 
-                ? "AI 搜尋引擎在該業界回答時最常引用的 Web 媒體與網域" 
+                ? "Gemini 搜尋引擎在該業界回答時最常引用的 Web 媒體與網域" 
                 : lang === "en" 
-                ? "Primary web media and domains referenced by AI Overviews for this industry query." 
-                : "Google AI Overviews / Gemini がこの検索テーマで最も信頼・参照している動的Webメディア一覧"}
+                ? "Primary web media and domains referenced by Gemini (Google Search Grounding) for this industry query." 
+                : "Gemini（Googleウェブ検索連携）がこの検索テーマで最も信頼・参照している動的Webメディア一覧"}
             </p>
           </div>
 
