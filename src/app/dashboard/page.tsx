@@ -476,7 +476,7 @@ export default function DashboardPage() {
         onClose={() => setOutreachAction(null)}
         targetBrand={displayBrandName}
         targetDomain={domain}
-        mediaName={dynamicAdvice.top_influential_media.join(', ')}
+        mediaName={dynamicAdvice?.top_influential_media?.join(', ') ?? ''}
         outreachType={outreachAction?.action_type === 'press_release' ? 'press_release' : 'listing_request'}
       />
     </div>
