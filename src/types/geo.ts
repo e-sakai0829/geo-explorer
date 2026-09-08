@@ -94,6 +94,7 @@ export interface DashboardStats {
   avgRank: number | null;
   domainCoverageRate: number | null; // 0-1
   trend: MonthlyLLMReport[];
+  competitorScores?: Record<string, number>;
   atsBreakdown?: {
     directMentionScore: number;
     citationDomainScore: number;

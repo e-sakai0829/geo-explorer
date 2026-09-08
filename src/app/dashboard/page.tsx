@@ -466,6 +466,9 @@ export default function DashboardPage() {
         targetDomain={domain}
         competitors={competitors}
         atsScore={stats.atsScore ?? 0}
+        atsBreakdown={stats.atsBreakdown}
+        competitorScores={stats.competitorScores}
+        dynamicAdvice={dynamicAdvice}
       />
 
       <OutreachModal

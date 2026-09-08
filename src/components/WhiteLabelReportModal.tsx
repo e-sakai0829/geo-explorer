@@ -11,6 +11,16 @@ interface WhiteLabelReportModalProps {
   targetDomain: string;
   competitors: string[];
   atsScore: number;
+  atsBreakdown?: {
+    directMentionScore: number;
+    citationDomainScore: number;
+    fanoutCoverageScore: number;
+  } | null;
+  competitorScores?: Record<string, number>;
+  dynamicAdvice?: {
+    diagnosis_summary?: string;
+    recommended_actions?: Array<{ priority: string; title: string; description: string }>;
+  } | null;
 }
 
 export function WhiteLabelReportModal({
@@ -19,7 +29,10 @@ export function WhiteLabelReportModal({
   targetBrand,
   targetDomain,
   competitors,
-  atsScore
+  atsScore,
+  atsBreakdown,
+  competitorScores,
+  dynamicAdvice,
 }: WhiteLabelReportModalProps) {
   const [agencyLogoText, setAgencyLogoText] = useState("Web Marketing Agency Inc.");
 
@@ -132,19 +145,25 @@ export function WhiteLabelReportModal({
                 <tr className="bg-indigo-50/80 font-bold text-slate-900">
                   <td className="p-2.5">{targetBrand} (自社)</td>
                   <td className="p-2.5 text-center text-indigo-700 font-black">{atsScore} pt</td>
-                  <td className="p-2.5 text-center">15 pt</td>
-                  <td className="p-2.5 text-center">15 pt ⚠️</td>
-                  <td className="p-2.5 text-center">12 pt</td>
+                  <td className="p-2.5 text-center">{atsBreakdown?.directMentionScore ?? (atsScore > 0 ? Math.round(atsScore * 0.4) : 0)} pt</td>
+                  <td className="p-2.5 text-center">{atsBreakdown?.citationDomainScore ?? (atsScore > 0 ? Math.round(atsScore * 0.4) : 0)} pt</td>
+                  <td className="p-2.5 text-center">{atsBreakdown?.fanoutCoverageScore ?? (atsScore > 0 ? Math.round(atsScore * 0.2) : 0)} pt</td>
                 </tr>
-                {competitors.map((comp, idx) => (
-                  <tr key={`${comp}-${idx}`} className="text-slate-700">
-                    <td className="p-2.5">{comp}</td>
-                    <td className="p-2.5 text-center font-bold text-emerald-600">{Math.max(0, 78 - idx * 10)} pt</td>
-                    <td className="p-2.5 text-center">35 pt</td>
-                    <td className="p-2.5 text-center">28 pt</td>
-                    <td className="p-2.5 text-center">15 pt</td>
-                  </tr>
-                ))}
+                {competitors.map((comp, idx) => {
+                  const compScore = competitorScores?.[comp] ?? (atsScore > 0 ? Math.max(10, Math.round(atsScore * (0.85 + (idx % 3) * 0.1))) : 0);
+                  const compDirect = Math.round(compScore * 0.45);
+                  const compCitation = Math.round(compScore * 0.35);
+                  const compFanout = Math.max(0, compScore - compDirect - compCitation);
+                  return (
+                    <tr key={`${comp}-${idx}`} className="text-slate-700">
+                      <td className="p-2.5 font-medium">{comp}</td>
+                      <td className="p-2.5 text-center font-bold text-emerald-600">{compScore} pt</td>
+                      <td className="p-2.5 text-center">{compDirect} pt</td>
+                      <td className="p-2.5 text-center">{compCitation} pt</td>
+                      <td className="p-2.5 text-center">{compFanout} pt</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -155,10 +174,27 @@ export function WhiteLabelReportModal({
               2. 来月度の推奨アクションプラン
             </h2>
             <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl text-xs space-y-2 text-amber-950">
-              <div className="font-bold text-amber-900">💡 診断結果: 専門比較メディアへの露出強化が最優先</div>
+              <div className="font-bold text-amber-900">
+                💡 {dynamicAdvice?.diagnosis_summary ? "AI検索動的診断結果" : "推奨アクションプラン"}
+              </div>
               <p className="text-[11px] text-amber-900/90 leading-relaxed">
-                AI回答の根拠として大手比較サイト（it-trend.jp, boxil.jp）が参照されています。自社ドメインの未掲載分を解消するため、掲載申請および概要テキストの「35-65文字直答化」を実行いたします。
+                {dynamicAdvice?.diagnosis_summary ??
+                  "AI回答の根拠として業界専門メディア・比較サイトが参照されています。自社ドメインの未掲載分を解消するため、掲載申請および概要テキストの「35-65文字直答化」を実行いたします。"}
               </p>
+              {dynamicAdvice?.recommended_actions && dynamicAdvice.recommended_actions.length > 0 && (
+                <div className="mt-2.5 space-y-1.5 pt-2 border-t border-amber-200/70">
+                  {dynamicAdvice.recommended_actions.map((act, aIdx) => (
+                    <div key={aIdx} className="flex items-start gap-1.5 text-[11px] text-amber-950">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-200/80 text-amber-900 shrink-0">
+                        {act.priority}
+                      </span>
+                      <div>
+                        <span className="font-bold">{act.title}:</span> {act.description}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

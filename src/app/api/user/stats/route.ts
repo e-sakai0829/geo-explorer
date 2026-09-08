@@ -152,10 +152,27 @@ export async function GET(req: NextRequest) {
         vsPromptWinRate: null,
       }));
 
-    const stats: DashboardStatsWithBreakdown = {
+    const competitorScoreSums: Record<string, { sum: number; count: number }> = {};
+    logs.slice(-20).forEach((l) => {
+      const map = (l.competitor_ats_scores || {}) as Record<string, number>;
+      Object.entries(map).forEach(([comp, score]) => {
+        if (typeof score === "number" && score > 0) {
+          if (!competitorScoreSums[comp]) competitorScoreSums[comp] = { sum: 0, count: 0 };
+          competitorScoreSums[comp].sum += score;
+          competitorScoreSums[comp].count += 1;
+        }
+      });
+    });
+    const competitorScores: Record<string, number> = {};
+    Object.entries(competitorScoreSums).forEach(([comp, { sum, count }]) => {
+      competitorScores[comp] = Math.round(sum / count);
+    });
+
+    const stats = {
       hasScanData: true,
       atsScore,
       competitorTopAtsScore,
+      competitorScores,
       citationRate,
       vsPromptWinRate,
       avgRank,

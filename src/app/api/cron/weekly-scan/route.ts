@@ -6,9 +6,12 @@ import { runGeminiScan, buildScanPrompt, evaluateScan, DEFAULT_ENGINE } from "@/
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// 1回の起動あたりに処理する最大プロンプト件数（サーバーレス関数のタイムアウト・
-// Gemini APIレート制限を考慮した安全上限）。上限を超えた分は次回起動で処理される。
-const MAX_PROMPTS_PER_RUN = 50;
+// 1回の起動あたりに処理する最大プロンプト件数。
+// 毎日深夜（UTC 18:00 / JST 03:00）に起動し、1日最大60件 × 週7日 = 週420件を無理なく消化。
+const MAX_PROMPTS_PER_RUN = 60;
+
+/** APIレートリミットを保護するための安全待機 */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * 週次自動スキャンバッチ。
@@ -109,9 +112,12 @@ export async function GET(req: NextRequest) {
         .eq("id", p.id);
 
       results.push({ promptId: p.id, status: "ok" });
+      // レート制限（RPM）を考慮し、1リクエストごとに安全待機
+      await sleep(800);
     } catch (err: any) {
       console.error(`weekly-scan: failed for prompt ${p.id}`, err);
       results.push({ promptId: p.id, status: "error", error: err.message });
+      await sleep(1000);
     }
   }
 
