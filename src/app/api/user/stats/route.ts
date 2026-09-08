@@ -17,6 +17,10 @@ const EMPTY_STATS: DashboardStatsWithBreakdown = {
   domainCoverageRate: null,
   trend: [],
   atsBreakdown: null,
+  diagnosticAdvice: null,
+  primarySourceType: null,
+  fanoutQueries: [],
+  fanoutDiff: null,
 };
 
 /** 日付から ISO週（月曜始まり）のラベル（週の月曜日 YYYY-MM-DD）を求める */
@@ -78,7 +82,7 @@ export async function GET(req: NextRequest) {
     const { data: logs } = await supabase
       .from("prompt_analysis_logs")
       .select(
-        "prompt_id, engine, brand_cited, competitor_mentions, target_ats_score, competitor_ats_scores, rank, aio_status, win_loss, scanned_at, direct_mention_score, citation_domain_score, fanout_coverage_score"
+        "prompt_id, engine, brand_cited, competitor_mentions, target_ats_score, competitor_ats_scores, rank, aio_status, win_loss, scanned_at, direct_mention_score, citation_domain_score, fanout_coverage_score, diagnostic_advice, primary_source_type, fanout_queries"
       )
       .in("prompt_id", promptIds)
       .order("scanned_at", { ascending: true });
@@ -182,6 +186,36 @@ export async function GET(req: NextRequest) {
       competitorScores[comp] = Math.round(sum / count);
     });
 
+    // 最新スキャンログから改善アドバイスとファンアウトクエリを取得
+    const latestLogWithAdvice = [...logs].reverse().find((l) => l.diagnostic_advice && Object.keys(l.diagnostic_advice).length > 0) || logs[logs.length - 1];
+    const diagnosticAdvice = latestLogWithAdvice?.diagnostic_advice || null;
+    const primarySourceType = latestLogWithAdvice?.primary_source_type || null;
+    const fanoutQueries = latestLogWithAdvice?.fanout_queries || [];
+
+    // 時系列ファンアウト集合差分（Added / Kept / Dropped）の算出
+    const logsWithFanouts = logs.filter((l) => Array.isArray(l.fanout_queries) && l.fanout_queries.length > 0);
+    let fanoutDiff: any = null;
+
+    if (logsWithFanouts.length >= 1) {
+      const currentLog = logsWithFanouts[logsWithFanouts.length - 1];
+      const prevLog = logsWithFanouts.length >= 2 ? logsWithFanouts[logsWithFanouts.length - 2] : null;
+
+      const currentSet = new Set((currentLog.fanout_queries || []).map((q: string) => q.trim()));
+      const prevSet = new Set((prevLog?.fanout_queries || []).map((q: string) => q.trim()));
+
+      const added = Array.from(currentSet).filter((q) => !prevSet.has(q));
+      const kept = Array.from(currentSet).filter((q) => prevSet.has(q));
+      const dropped = Array.from(prevSet).filter((q) => !currentSet.has(q));
+
+      fanoutDiff = {
+        added: prevLog ? added : [],
+        kept: prevLog ? kept : Array.from(currentSet),
+        dropped: prevLog ? dropped : [],
+        previousCount: prevSet.size,
+        currentCount: currentSet.size,
+      };
+    }
+
     const stats = {
       hasScanData: true,
       atsScore,
@@ -193,6 +227,10 @@ export async function GET(req: NextRequest) {
       domainCoverageRate,
       trend,
       atsBreakdown,
+      diagnosticAdvice,
+      primarySourceType,
+      fanoutQueries,
+      fanoutDiff,
     };
 
     return NextResponse.json(stats);

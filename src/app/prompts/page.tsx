@@ -275,25 +275,6 @@ function PromptsContent() {
     setTargetLocale(lang);
   }, [lang]);
 
-  // DBからプロジェクト設定を取得（自社URLの自動補完・ガード付き）
-  useEffect(() => {
-    fetch("/api/user/project")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.project) {
-          if (data.project.name) setBrandName(data.project.name);
-          if (Array.isArray(data.project.competitors)) {
-            setCompetitors(data.project.competitors);
-          }
-          if (data.project.domain && !data.project.domain.includes("example.com")) {
-            setProjectDomain(data.project.domain);
-            setSuggestUrl(data.project.domain);
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const handleAnalyze = async (e?: React.FormEvent, promptOverride?: string, categoryOverride?: string) => {
     if (e) e.preventDefault();
     const targetPrompt = promptOverride ?? prompt;
@@ -319,6 +300,7 @@ function PromptsContent() {
           competitors,
           targetLocale,
           category: categoryOverride,
+          projectId,
         }),
       });
 

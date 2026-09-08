@@ -105,6 +105,32 @@ export async function POST(req: NextRequest) {
 
     // 新規作成の場合、または既存プロジェクトIDがない場合は上限チェック
     if (isNew || !projectId) {
+      // 1. アトミックRPC実行（TOCTOU防止）
+      const { data: rpcResult, error: rpcError } = await supabase.rpc("create_project_with_limit", {
+        org_id: orgId,
+        proj_name: name || "新規サイト",
+        proj_domain: domain || "https://example.com",
+        proj_competitors: formattedCompetitors,
+      });
+
+      if (!rpcError && rpcResult) {
+        if (rpcResult.error === "PROJECT_LIMIT_REACHED") {
+          return NextResponse.json(
+            {
+              error: `現在の${plan.toUpperCase()}プランでは最大${rpcResult.maxProjects}サイトまで登録可能です。複数サイトを管理するにはGrowthプラン（最大3サイト）またはAgencyプラン（無制限）へアップグレードしてください。`,
+              code: "PROJECT_LIMIT_REACHED",
+              currentCount: rpcResult.currentCount,
+              maxProjects: rpcResult.maxProjects,
+            },
+            { status: 403 }
+          );
+        }
+        if (rpcResult.success && rpcResult.project) {
+          return NextResponse.json({ success: true, project: rpcResult.project, isNew: true });
+        }
+      }
+
+      // フォールバック（RPC未定義時の標準チェック）
       const maxProjects = plan === "agency" ? 999 : plan === "growth" ? 3 : 1;
       const { count } = await supabase
         .from("projects")

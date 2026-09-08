@@ -53,8 +53,9 @@ function ProjectProviderInner({ children }: { children: React.ReactNode }) {
           setPlan(data.organization.plan.toLowerCase());
         }
 
-        // URLにプロジェクト指定がない場合、localStorageまたは先頭プロジェクトでURLを正規化
-        if (!urlProjectId && list.length > 0) {
+        // URLにプロジェクト指定がない、または自分のプロジェクト一覧に存在しない場合、先頭プロジェクトでURLを正規化
+        const isValidUrlId = urlProjectId && list.some((p: ProjectItem) => p.id === urlProjectId);
+        if ((!urlProjectId || !isValidUrlId) && list.length > 0) {
           const remembered = typeof window !== "undefined" ? localStorage.getItem("geo_last_project") : null;
           const initial = list.find((p: ProjectItem) => p.id === remembered) || list[0];
           if (initial?.id) {
@@ -73,9 +74,10 @@ function ProjectProviderInner({ children }: { children: React.ReactNode }) {
     fetchProjects();
   }, [pathname]);
 
-  // URLパラメータを最優先、なければprojects[0]
-  const projectId = urlProjectId || (projects[0]?.id ?? null);
-  const currentProject = projects.find((p) => p.id === projectId) || projects[0] || null;
+  // 有効なプロジェクトを特定（URLのIDが存在しない場合は先頭プロジェクト）
+  const validProject = projects.find((p) => p.id === urlProjectId) || projects[0] || null;
+  const projectId = validProject?.id ?? null;
+  const currentProject = validProject;
 
   const setProjectId = (id: string) => {
     if (typeof window !== "undefined") {

@@ -217,3 +217,70 @@ create policy "public can submit inquiries"
   for insert
   to anon, authenticated
   with check (true);
+
+-- ============================================================
+-- 9. FKインデックス（パフォーマンス最適化）
+-- ============================================================
+create index if not exists idx_projects_org on public.projects(organization_id);
+create index if not exists idx_tracked_prompts_project on public.tracked_prompts(project_id);
+create index if not exists idx_prompt_analysis_logs_prompt on public.prompt_analysis_logs(prompt_id);
+create index if not exists idx_prompt_analysis_logs_scanned_at on public.prompt_analysis_logs(scanned_at desc);
+create index if not exists idx_aeo_articles_project on public.aeo_articles(project_id);
+create index if not exists idx_domain_citations_project on public.domain_citations(project_id);
+
+-- ============================================================
+-- 10. アトミックなプロジェクト作成関数 (TOCTOU防止)
+-- ============================================================
+create or replace function public.create_project_with_limit(
+    org_id uuid,
+    proj_name text,
+    proj_domain text,
+    proj_competitors text[]
+)
+returns jsonb as $$
+declare
+    current_plan text;
+    current_count integer;
+    max_count integer;
+    new_proj public.projects%rowtype;
+begin
+    -- 組織所有者チェック
+    select plan into current_plan
+    from public.organizations
+    where id = org_id and user_id = auth.uid();
+
+    if not found then
+        return jsonb_build_object('error', 'Organization not found or permission denied');
+    end if;
+
+    current_plan := lower(coalesce(current_plan, 'starter'));
+    max_count := case current_plan
+        when 'agency' then 999
+        when 'growth' then 3
+        else 1
+    end;
+
+    -- アトミックなカウントチェック
+    select count(*) into current_count
+    from public.projects
+    where organization_id = org_id;
+
+    if current_count >= max_count then
+        return jsonb_build_object(
+            'error', 'PROJECT_LIMIT_REACHED',
+            'currentCount', current_count,
+            'maxProjects', max_count,
+            'plan', current_plan
+        );
+    end if;
+
+    insert into public.projects (organization_id, name, domain, competitors)
+    values (org_id, coalesce(proj_name, '新規サイト'), coalesce(proj_domain, 'https://example.com'), coalesce(proj_competitors, array[]::text[]))
+    returning * into new_proj;
+
+    return jsonb_build_object(
+        'success', true,
+        'project', to_jsonb(new_proj)
+    );
+end;
+$$ language plpgsql security definer;

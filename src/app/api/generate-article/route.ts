@@ -53,6 +53,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "記事テーマ（プロンプト）を指定してください。" }, { status: 400 });
     }
 
+    // 対象プロジェクトの特定と権限検証（生成実行前に検証し誤課金を防止）
+    let targetProject: any = null;
+    if (requestedProjectId) {
+      const { data: p } = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("id", requestedProjectId)
+        .eq("organization_id", org.id)
+        .single();
+      if (!p) {
+        return NextResponse.json({ error: "指定されたプロジェクトが見つかりません。" }, { status: 404 });
+      }
+      targetProject = p;
+    } else {
+      const { data: p } = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      targetProject = p;
+    }
+
+    const effectiveBrandName = brandName && brandName !== "自社ブランド"
+      ? brandName
+      : (targetProject?.name || brandName);
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
@@ -135,29 +163,6 @@ IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for
 
     // 5. AI生成成功後のみ、アトミックにクレジットを消費
     await supabase.rpc("consume_credit", { org_id: org.id });
-
-    // 対象プロジェクトの特定
-    let targetProject: any = null;
-    if (requestedProjectId) {
-      const { data: p } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("id", requestedProjectId)
-        .eq("organization_id", org.id)
-        .single();
-      targetProject = p;
-    }
-
-    if (!targetProject) {
-      const { data: p } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("organization_id", org.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
-      targetProject = p;
-    }
 
     // 6. 生成記事を実DB（aeo_articles）に保存
     if (targetProject?.id) {

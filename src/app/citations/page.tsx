@@ -86,26 +86,39 @@ export default function CitationsPage() {
       .catch(() => {});
   }, [currentProject?.id, currentProject?.name]);
 
-  // 引用ソースを分析用にフォーマット集計
+  // 引用ソースを分析用にフォーマット集計（乱数を完全撤廃し実測カウントに統一）
   const formatSources = (sources: any[]) => {
     if (!sources || sources.length === 0) return [];
-    return sources.map((src: any, idx: number) => {
+
+    // 実測引用URL群からドメインごとの出現件数を集計
+    const domainCounts: Record<string, { count: number; title: string; url: string }> = {};
+    sources.forEach((src: any) => {
       const urlStr = typeof src === "string" ? src : src.url || src.uri || "";
-      let domain = "";
+      let d = "";
       try {
-        domain = new URL(urlStr).hostname.replace(/^www\./, "");
+        d = new URL(urlStr).hostname.replace(/^www\./, "");
       } catch (e) {
-        domain = urlStr || `source-${idx + 1}`;
+        d = urlStr;
       }
-      return {
-        domain: domain,
-        name: typeof src === "object" && src.title ? src.title : domain,
-        citations: Math.floor(Math.random() * 15) + 12,
-        category: "AI参照メディア",
-        authority: Math.floor(Math.random() * 15) + 75,
-        sampleUrl: urlStr,
-      };
+      if (!d) return;
+
+      const title = typeof src === "object" && src.title ? src.title : d;
+      if (!domainCounts[d]) {
+        domainCounts[d] = { count: 1, title, url: urlStr };
+      } else {
+        domainCounts[d].count += 1;
+      }
     });
+
+    return Object.entries(domainCounts).map(([domain, data]) => ({
+      domain,
+      name: data.title,
+      citations: data.count, // 実測出現件数
+      category: "実測AI参照ソース",
+      authority: null, // 乱数生成を完全撤廃（未計測を明示）
+      sampleUrl: data.url,
+      isReal: true,
+    }));
   };
 
   // リアルタイムAIスキャン解析の実行
@@ -353,9 +366,15 @@ export default function CitationsPage() {
                     {item.citations} <span className="text-slate-400 font-normal">{lang === "zh-TW" ? "次" : lang === "en" ? "times" : "回"}</span>
                   </td>
                   <td className="py-4 px-4">
-                    <span className="inline-flex items-center gap-1 font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-[11px] border border-indigo-100">
-                      DA {item.authority}
-                    </span>
+                    {item.authority ? (
+                      <span className="inline-flex items-center gap-1 font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-[11px] border border-indigo-100">
+                        DA {item.authority}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                        実測引用 (ー)
+                      </span>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-right whitespace-nowrap">
                     <Link

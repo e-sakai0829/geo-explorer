@@ -76,10 +76,11 @@ export async function POST(req: NextRequest) {
           .eq("id", requestedProjectId)
           .eq("organization_id", orgObj.id)
           .single();
+        if (!p) {
+          return NextResponse.json({ error: "指定されたプロジェクトが見つかりません。" }, { status: 404 });
+        }
         activeProject = p;
-      }
-
-      if (!activeProject) {
+      } else {
         const { data: p } = await supabase
           .from("projects")
           .select("id, domain, name, competitors")

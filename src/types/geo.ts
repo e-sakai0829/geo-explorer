@@ -84,7 +84,6 @@ export interface DomainCitationItem {
   lastSeenAt: string;
 }
 
-/** ダッシュボードKPIカード用の集計結果（未計測時は null を許容し「ー」表示に使う） */
 export interface DashboardStats {
   hasScanData: boolean;
   atsScore: number | null;
@@ -99,5 +98,21 @@ export interface DashboardStats {
     directMentionScore: number;
     citationDomainScore: number;
     fanoutCoverageScore: number;
+  } | null;
+  diagnosticAdvice?: {
+    cause: string;
+    action: string;
+    priorityAction: string;
+    estimatedImpact: string;
+    recommendedKeywords?: string[];
+  } | null;
+  primarySourceType?: string | null;
+  fanoutQueries?: string[];
+  fanoutDiff?: {
+    added: string[];
+    kept: string[];
+    dropped: string[];
+    previousCount: number;
+    currentCount: number;
   } | null;
 }

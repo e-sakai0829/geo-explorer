@@ -323,13 +323,15 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
               </button>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400/20 text-amber-300 rounded-full text-xs font-bold border border-amber-300/30 mb-3">
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Growth / Agency プラン限定機能</span>
+                <span>{plan === "growth" ? "Agency プラン限定（サイト数無制限）" : "Growth / Agency プラン限定機能"}</span>
               </div>
               <h3 className="text-lg font-black text-white">
-                マルチプロジェクト（複数サイト）管理
+                {plan === "growth" ? "無制限マルチプロジェクト管理" : "マルチプロジェクト（複数サイト）管理"}
               </h3>
               <p className="text-xs text-indigo-200 mt-1 leading-relaxed">
-                複数ブランド・子会社・オウンドメディアを1つのアカウントで個別管理。
+                {plan === "growth"
+                  ? "Growthプランの上限（3サイト）に達しました。無制限にクライアントやブランドを追加・管理するにはAgencyプランをご利用ください。"
+                  : "複数ブランド・子会社・オウンドメディアを1つのアカウントで個別管理。"}
               </p>
             </div>
 
@@ -338,16 +340,28 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
                 <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
                   <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-slate-900">最大3〜無制限のサイトを個別追跡:</strong>
-                    <div className="text-slate-500 mt-0.5">プロジェクトごとに独立した競合他社比較・独自ATSスコア・引用メディア解析を一元管理できます。</div>
+                    <strong className="text-slate-900">
+                      {plan === "growth" ? "サイト登録数 無制限:" : "最大3〜無制限のサイトを個別追跡:"}
+                    </strong>
+                    <div className="text-slate-500 mt-0.5">
+                      {plan === "growth"
+                        ? "代理店・制作会社向けに、受託クライアントの全ドメインを上限なく並行監視できます。"
+                        : "プロジェクトごとに独立した競合他社比較・独自ATSスコア・引用メディア解析を一元管理できます。"}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
                   <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-slate-900">月間150プロンプト ＋ AEO記事25本枠（Starterの5倍）:</strong>
-                    <div className="text-slate-500 mt-0.5">週次自動モニタリングやBefore/After効果測定トラッカーもフル解放されます。</div>
+                    <strong className="text-slate-900">
+                      {plan === "growth" ? "ホワイトラベル提出用PDF ＋ 月500クエリ:" : "月間150プロンプト ＋ AEO記事25本枠:"}
+                    </strong>
+                    <div className="text-slate-500 mt-0.5">
+                      {plan === "growth"
+                        ? "GEO Explorerのロゴを非表示にし、自社・クライアント向け月次提案レポートを自動生成。"
+                        : "週次自動モニタリングやBefore/After効果測定トラッカーもフル解放されます。"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -366,7 +380,11 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
                   }}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Growthプランへアップグレード (月19,800円)</span>
+                  <span>
+                    {plan === "growth"
+                      ? "Agencyプランへアップグレード (月59,800円)"
+                      : "Growthプランへアップグレード (月19,800円)"}
+                  </span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>

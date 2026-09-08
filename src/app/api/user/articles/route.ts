@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireProjectAccess } from "@/lib/require-project";
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,18 +27,12 @@ export async function GET(req: NextRequest) {
     // ユーザーのプロジェクトを取得
     let targetProjectIds: string[] = [];
     if (requestedProjectId) {
-      const { data: proj } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("id", requestedProjectId)
-        .eq("organization_id", org.id)
-        .single();
-      if (proj) {
-        targetProjectIds = [proj.id];
+      const validProject = await requireProjectAccess(supabase, org.id, requestedProjectId);
+      if (!validProject) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
       }
-    }
-
-    if (targetProjectIds.length === 0) {
+      targetProjectIds = [validProject.id];
+    } else {
       const { data: projects } = await supabase
         .from("projects")
         .select("id")

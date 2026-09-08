@@ -158,14 +158,17 @@ export function WhiteLabelReportModal({
                     <tr key={`${comp}-${idx}`} className="text-slate-700">
                       <td className="p-2.5 font-medium">{comp}</td>
                       <td className="p-2.5 text-center font-bold text-emerald-600">{compScore} pt</td>
-                      <td className="p-2.5 text-center">{compDirect} pt</td>
-                      <td className="p-2.5 text-center">{compCitation} pt</td>
-                      <td className="p-2.5 text-center">{compFanout} pt</td>
+                      <td className="p-2.5 text-center text-slate-500">{compDirect} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
+                      <td className="p-2.5 text-center text-slate-500">{compCitation} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
+                      <td className="p-2.5 text-center text-slate-500">{compFanout} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            <div className="text-[10px] text-slate-400 text-right mt-1.5">
+              ※ 自社行の内訳は実測値です。競合行の内訳は総合ATSスコアに基づく推定値です。
+            </div>
           </div>
 
           {/* Action Recommendations */}

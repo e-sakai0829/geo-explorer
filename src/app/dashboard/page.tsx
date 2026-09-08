@@ -131,16 +131,14 @@ export default function DashboardPage() {
   // ブランド名が未設定の間だけ、言語に応じたプレースホルダーを表示する（再フェッチはしない）
   const displayBrandName = brandName === "自社ブランド" ? (DEFAULT_BRAND_NAME[lang] ?? DEFAULT_BRAND_NAME.ja) : brandName;
 
-  const dynamicAdvice = useMemo(() => ({
-    primary_source_type: 'specialized_and_comparison' as const,
-    top_influential_media: ['it-trend.jp', 'boxil.jp'],
-    gap_pattern: 'source_exposure_lack' as const,
-    diagnosis_summary: `AIは「it-trend.jp, boxil.jp」の専門比較メディアを参照しています。自社が未掲載のため競合A社(78pt)に遅れをとっています。`,
-    recommended_actions: [
-      { priority: 'HIGH' as const, action_type: 'external_listing' as const, title: 'it-trend.jp / boxil.jp への掲載手続き', description: 'AIが最優先参照している比較メディアへの掲載有無を確認しリクエストを実行してください。' },
-      { priority: 'MEDIUM' as const, action_type: 'content_rewrite' as const, title: '掲載テキストの35-65文字直答化', description: 'メディア上の概要欄文章をAIが要約しやすいアンサー形式にリライトしてください。' }
-    ]
-  }), []);
+  // 実スキャンログから取得した改善アドバイス（未スキャン時は null）
+  const dynamicAdvice = (stats.diagnosticAdvice as any) || null;
+
+  // 最高スコアの競合ブランド名を実測マップから正確に特定
+  const topCompetitorEntry = stats.competitorScores && Object.keys(stats.competitorScores).length > 0
+    ? Object.entries(stats.competitorScores).sort(([, a], [, b]) => b - a)[0]
+    : null;
+  const topCompetitorName = topCompetitorEntry ? topCompetitorEntry[0] : (competitors[0] || "競合最高値");
 
   const isAgencyPlan = credits.plan.toLowerCase() === "agency";
 
@@ -364,7 +362,7 @@ export default function DashboardPage() {
                       fanoutScore: stats.atsBreakdown.fanoutCoverageScore,
                     },
                     ...(stats.competitorTopAtsScore !== null
-                      ? [{ brandName: competitors[0] || '競合最高値', isTarget: false, atsScore: stats.competitorTopAtsScore, directScore: 0, citationScore: 0, fanoutScore: 0 }]
+                      ? [{ brandName: topCompetitorName, isTarget: false, atsScore: stats.competitorTopAtsScore, directScore: 0, citationScore: 0, fanoutScore: 0 }]
                       : []),
                   ]
                 : []
@@ -408,15 +406,20 @@ export default function DashboardPage() {
         ]}
       />
 
-      {/* Fan-out Exploration Card */}
+      {/* Fan-out Exploration Card（実測ファンアウトクエリ群 ＆ 時系列差分にバインド） */}
       <FanoutExplorerCard
-        fanoutQueries={[
-          "営業DX ツール 中小企業 費用相場",
-          "SFA CRM 連携 営業DX おすすめ",
-          "営業DX 導入 失敗事例 と対策",
-          "営業DX ツール 無料お試し あり"
-        ]}
-        coveredQueries={["営業DX ツール 無料お試し あり"]}
+        fanoutQueries={
+          stats.hasScanData && stats.fanoutQueries && stats.fanoutQueries.length > 0
+            ? stats.fanoutQueries
+            : [
+                `${displayBrandName} 費用相場`,
+                `${displayBrandName} 導入 メリット`,
+                `${displayBrandName} 評判 比較`
+              ]
+        }
+        coveredQueries={[]}
+        fanoutDiff={stats.fanoutDiff}
+        parentPrompt={displayBrandName}
         onInvestigateFanout={handleInvestigateFanout}
       />
 
