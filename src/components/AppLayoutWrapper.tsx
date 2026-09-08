@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import CookieBanner from "@/components/CookieBanner";
 import { LanguageProvider, useLanguage } from "@/context/LanguageContext";
+import { ProjectProvider, useProject } from "@/context/ProjectContext";
 import { Language } from "@/lib/i18n";
 import { 
   ChevronDown, 
@@ -17,7 +18,9 @@ import {
   Sparkles,
   X,
   CheckCircle2,
-  ArrowRight 
+  ArrowRight,
+  PlusCircle,
+  Loader2 
 } from "lucide-react";
 import ConsultingModal from "@/components/ConsultingModal";
 
@@ -32,11 +35,18 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/legal";
 
   const { lang, setLang, t } = useLanguage();
+  const { projectId, currentProject, projects, plan, setProjectId, refreshProjects } = useProject();
+
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-  const [projectName, setProjectName] = useState("自社ブランド");
-  const [projectDomain, setProjectDomain] = useState("https://example.com");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDomain, setNewProjectDomain] = useState("");
+  const [newProjectCompetitors, setNewProjectCompetitors] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const [isConsultingOpen, setIsConsultingOpen] = useState(false);
   const [credits, setCredits] = useState({ total: 10, used: 0, remaining: 10 });
 
@@ -64,6 +74,49 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     } catch (e) {}
   };
 
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateLoading(true);
+    setCreateError(null);
+
+    try {
+      const res = await fetch("/api/user/project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isNew: true,
+          name: newProjectName,
+          domain: newProjectDomain,
+          competitors: newProjectCompetitors,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === "PROJECT_LIMIT_REACHED") {
+          setIsCreateModalOpen(false);
+          setIsUpgradeModalOpen(true);
+        } else {
+          setCreateError(data.error || "プロジェクト作成に失敗しました。");
+        }
+        return;
+      }
+
+      await refreshProjects();
+      if (data.project?.id) {
+        setProjectId(data.project.id);
+      }
+      setIsCreateModalOpen(false);
+      setNewProjectName("");
+      setNewProjectDomain("");
+      setNewProjectCompetitors("");
+    } catch (err: any) {
+      setCreateError(err.message || "エラーが発生しました。");
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const languages: { code: Language; name: string; flag: string }[] = [
     { code: "ja", name: "日本語", flag: "🇯🇵" },
     { code: "zh-TW", name: "繁體中文", flag: "🇹🇼" },
@@ -74,18 +127,6 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isFullPage) {
-      // プロジェクト設定をDBから取得
-      fetch("/api/user/project")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.project) {
-            setProjectName(data.project.name || "自社ブランド");
-            setProjectDomain(data.project.domain || "https://example.com");
-          }
-        })
-        .catch(() => {});
-
-      // クレジット残高をDBから取得
       fetchCredits();
     }
   }, [isFullPage, pathname]);
@@ -98,6 +139,9 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  const displayName = currentProject?.name || "自社ブランド";
+  const displayDomain = currentProject?.domain || "https://example.com";
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 antialiased font-sans">
@@ -115,7 +159,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs max-w-xs"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                <span className="truncate">{projectName} - {projectDomain}</span>
+                <span className="truncate">{displayName} - {displayDomain}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               </button>
 
@@ -125,32 +169,56 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
                     {lang === "zh-TW" ? "登錄專案列表" : lang === "en" ? "Registered Projects" : "登録プロジェクト一覧"}
                   </div>
                   
-                  {/* 現在のプロジェクト */}
-                  <div className="px-3 py-2 text-xs bg-indigo-50/60 text-indigo-900 font-bold flex items-center justify-between">
-                    <div className="truncate">
-                      <div>{projectName}</div>
-                      <div className="text-[10px] text-slate-400 font-normal truncate">{projectDomain}</div>
-                    </div>
-                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
-                  </div>
+                  {/* 登録プロジェクト一覧 */}
+                  {projects.map((p) => {
+                    const isSelected = p.id === projectId;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setProjectId(p.id);
+                          setProjectMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected ? "bg-indigo-50/70 text-indigo-900 font-bold" : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="truncate">
+                          <div>{p.name}</div>
+                          <div className="text-[10px] text-slate-400 font-normal truncate">{p.domain}</div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
 
                   <div className="border-t border-slate-100 my-1"></div>
 
-                  {/* 新規プロジェクト追加（StarterユーザーにはUpgrade案内） */}
+                  {/* 新規プロジェクト追加（StarterならUpgradeモーダル、Growth以上なら新規作成モーダル） */}
                   <button
                     onClick={() => {
                       setProjectMenuOpen(false);
-                      setIsUpgradeModalOpen(true);
+                      if (plan === "starter") {
+                        setIsUpgradeModalOpen(true);
+                      } else {
+                        setIsCreateModalOpen(true);
+                      }
                     }}
                     className="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center justify-between cursor-pointer font-bold transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <FolderPlus className="w-3.5 h-3.5" />
-                      <span>{lang === "zh-TW" ? "+ 新增專案 (Growth以上)" : lang === "en" ? "+ Add Project (Growth+)" : "+ 新規プロジェクトを追加"}</span>
+                      <span>{lang === "zh-TW" ? "+ 新增專案" : lang === "en" ? "+ Add Project" : "+ 新規プロジェクトを追加"}</span>
                     </div>
-                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded flex items-center gap-0.5">
-                      <Lock className="w-2.5 h-2.5" /> Growth
-                    </span>
+                    {plan === "starter" ? (
+                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Growth
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-indigo-500 font-normal">
+                        ({projects.length} / {plan === "agency" ? "無制限" : "3"})
+                      </span>
+                    )}
                   </button>
                 </div>
               )}
@@ -230,8 +298,8 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       <ConsultingModal
         isOpen={isConsultingOpen}
         onClose={() => setIsConsultingOpen(false)}
-        defaultDomain={projectDomain !== "https://example.com" ? projectDomain : ""}
-        defaultBrandName={projectName !== "自社ブランド" ? projectName : ""}
+        defaultDomain={currentProject?.domain && currentProject.domain !== "https://example.com" ? currentProject.domain : ""}
+        defaultBrandName={currentProject?.name && currentProject.name !== "自社ブランド" ? currentProject.name : ""}
       />
 
       {/* マルチプロジェクト（Growth以上）アップグレード案内モーダル */}
@@ -306,6 +374,102 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       )}
+
+      {/* 新規プロジェクト追加モーダル (Growth / Agency 向け) */}
+      {isCreateModalOpen && (
+        <div
+          role="presentation"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsCreateModalOpen(false); }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95"
+          >
+            <div className="bg-slate-900 text-white p-6 relative">
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="absolute top-4 right-4 p-1.5 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold border border-indigo-400/30 mb-2">
+                <FolderPlus className="w-3.5 h-3.5 text-indigo-400" />
+                <span>新規サイト・ブランドの追加</span>
+              </div>
+              <h3 className="text-lg font-black text-white">
+                新しいプロジェクトを登録
+              </h3>
+              <p className="text-xs text-slate-300 mt-1">
+                独立したGEOダッシュボード・引用分析・プロンプト追跡を開始します。
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="p-6 space-y-4">
+              {createError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
+                  {createError}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">プロジェクト名 / ブランド名</label>
+                <input
+                  type="text"
+                  required
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="例: 株式会社A-Sales オウンドメディア"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">対象ドメイン (URL)</label>
+                <input
+                  type="url"
+                  required
+                  value={newProjectDomain}
+                  onChange={(e) => setNewProjectDomain(e.target.value)}
+                  placeholder="例: https://example.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">競合ブランド名（カンマ区切りで最大5社）</label>
+                <input
+                  type="text"
+                  value={newProjectCompetitors}
+                  onChange={(e) => setNewProjectCompetitors(e.target.value)}
+                  placeholder="例: 競合A, 競合B, 競合C"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {createLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                  <span>{createLoading ? "プロジェクト登録中..." : "プロジェクトを作成"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <CookieBanner />
     </div>
   );
@@ -314,7 +478,9 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 export default function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <LanguageProvider>
-      <LayoutInner>{children}</LayoutInner>
+      <ProjectProvider>
+        <LayoutInner>{children}</LayoutInner>
+      </ProjectProvider>
     </LanguageProvider>
   );
 }

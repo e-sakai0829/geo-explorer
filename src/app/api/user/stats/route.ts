@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireProjectAccess } from "@/lib/require-project";
 import type { DashboardStats, MonthlyLLMReport } from "@/types/geo";
 
 interface DashboardStatsWithBreakdown extends DashboardStats {
@@ -45,18 +46,31 @@ export async function GET(req: NextRequest) {
 
     if (!org) return NextResponse.json(EMPTY_STATS);
 
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("organization_id", org.id);
+    const reqProjectId = req.nextUrl.searchParams.get("projectId") || req.nextUrl.searchParams.get("project");
+    let targetProjectId = reqProjectId;
 
-    if (!projects || projects.length === 0) return NextResponse.json(EMPTY_STATS);
-    const projectIds = projects.map((p) => p.id);
+    if (targetProjectId) {
+      const validProject = await requireProjectAccess(supabase, org.id, targetProjectId);
+      if (!validProject) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+    } else {
+      const { data: firstProject } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (!firstProject) return NextResponse.json(EMPTY_STATS);
+      targetProjectId = firstProject.id;
+    }
 
     const { data: prompts } = await supabase
       .from("tracked_prompts")
       .select("id")
-      .in("project_id", projectIds);
+      .eq("project_id", targetProjectId);
 
     if (!prompts || prompts.length === 0) return NextResponse.json(EMPTY_STATS);
     const promptIds = prompts.map((p) => p.id);

@@ -48,9 +48,13 @@ const DEFAULT_BRAND_NAME: Record<string, string> = {
   en: "My Brand",
 };
 
+import { useProject } from "@/context/ProjectContext";
+
 export default function DashboardPage() {
   const { lang, t } = useLanguage();
   const router = useRouter();
+  const { projectId, currentProject } = useProject();
+
   const [brandName, setBrandName] = useState("自社ブランド");
   const [domain, setDomain] = useState("https://example.com");
   const [competitors, setCompetitors] = useState<string[]>([]);
@@ -64,33 +68,20 @@ export default function DashboardPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // データ取得は言語に依存しないため、一度だけ実行する（言語切替の度に再フェッチしない）
+  // プロジェクト情報が切り替わったらブランド名・ドメイン・競合を即時反映
+  useEffect(() => {
+    if (currentProject) {
+      if (currentProject.name) setBrandName(currentProject.name);
+      setDomain(currentProject.domain || "https://example.com");
+      if (Array.isArray(currentProject.competitors)) {
+        setCompetitors(currentProject.competitors);
+      }
+    }
+  }, [currentProject]);
+
+  // クレジット情報の取得（マウント時）
   useEffect(() => {
     let cancelled = false;
-
-    // プロジェクト設定の取得
-    fetch("/api/user/project")
-      .then((res) => {
-        if (!res.ok) throw new Error(`project fetch failed: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.project) {
-          if (data.project.name) setBrandName(data.project.name);
-          setDomain(data.project.domain || "https://example.com");
-          if (Array.isArray(data.project.competitors)) {
-            setCompetitors(data.project.competitors);
-          }
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("Failed to fetch project:", err);
-        setFetchError("プロジェクト情報の取得に失敗しました。");
-      });
-
-    // クレジット情報の取得
     fetch("/api/user/credits")
       .then((res) => {
         if (!res.ok) throw new Error(`credits fetch failed: ${res.status}`);
@@ -110,14 +101,20 @@ export default function DashboardPage() {
       .catch((err) => {
         if (cancelled) return;
         console.error("Failed to fetch credits:", err);
-        setFetchError("クレジット情報の取得に失敗しました。");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
-    // 実測スキャンデータの集計取得（未計測時は hasScanData: false が返る）
-    fetch("/api/user/stats")
+    return () => { cancelled = true; };
+  }, []);
+
+  // プロジェクトIDに応じた実測スキャンデータの集計取得（プロジェクト切替時に自動再フェッチ）
+  useEffect(() => {
+    let cancelled = false;
+    const statsUrl = projectId ? `/api/user/stats?projectId=${projectId}` : "/api/user/stats";
+
+    fetch(statsUrl)
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;
@@ -129,7 +126,7 @@ export default function DashboardPage() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [projectId]);
 
   // ブランド名が未設定の間だけ、言語に応じたプレースホルダーを表示する（再フェッチはしない）
   const displayBrandName = brandName === "自社ブランド" ? (DEFAULT_BRAND_NAME[lang] ?? DEFAULT_BRAND_NAME.ja) : brandName;

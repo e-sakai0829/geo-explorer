@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       prompt, 
       brandName = "自社ブランド", 
       fanoutQueries = [], 
-      targetLanguage = "ja" 
+      targetLanguage = "ja",
+      projectId: requestedProjectId,
     } = await req.json();
 
     if (!prompt) {
@@ -84,54 +85,25 @@ AEO Direct-Answer Guidelines:
     } else {
       languageInstruction = `
 言語要件：自然で知性的な「日本語」で執筆してください。
-
-【出力テンプレート（以下のMarkdown形式を100%厳守すること）】
-
-# ターゲットキーワードに関する網羅的AEO直答ガイド【2026年最新】
-
-## Q. [主要な疑問・問い形式のH2見出し]
-**A. [ここに35〜65文字以内の結論・定義・即答文章を前置きなしで配置]**
-
-### 1. [詳細な要素・ステップ・特徴のH3小見出し]
-詳細な解説文章を記述...
-
-### 2. [詳細な要素・ステップ・特徴のH3小見出し]
-詳細な解説文章を記述...
-
-## Q. [費用相場・比較に関する問い形式のH2見出し]
-**A. [ここに35〜65文字以内の費用・比較の結論即答文章]**
-
-| 比較項目 | 特徴・強み | おすすめの企業課題 |
-| --- | --- | --- |
-| 自社ブランド (${brandName}) | 専門性と実績 | 存在意義の再定義 |
-| 競合ファーム | 総合支援 | 経営計画との連動 |
-
-【厳格なMarkdownライティングルール】
-1. 記事の一番最初は必ず「# （シングルハッシュ）」で始まるH1タイトルにする。
-2. 大見出しは必ず「## Q. （ダブルハッシュ）」で始まる問い形式のH2にする。
-3. 各H2の直下は必ず「**A. 結論即答文章**」を太字で記述する。
-4. 小見出しは必ず「### 1. （トリプルハッシュ）」で始まるH3にする。
-5. 必ず上記のような「Markdown比較テーブル（表）」を最低1つ含める。
-6. 以下のクエリファンアウトを網羅する：${fanoutQueries.join(", ")}
+AEO直答コア規範：
+1. 大見出しは「## Q. （問いの形式）」にし、直下に「35〜65文字以内の結論直答文章」を太字で配置すること。
+2. 必ず自社ブランド（${brandName}）と一般的な選択肢を比較した「Markdown比較表」を最低1つ含めること。
+3. 記事末尾には「よくある質問（FAQ）」を3問以上設けること。
+4. 以下のクエリファンアウトを網羅すること：${fanoutQueries.join(", ")}
 `;
     }
 
-    const systemPrompt = `
-You are an elite AEO (Answer Engine Optimization) & LLMO Content Architect.
-Your mission is to generate high-authority structured content designed to be cited and recommended by Google AI Overviews, Gemini, and ChatGPT.
-
+    const systemPrompt = `あなたはGoogle AI Overviews（AIO）および生成AI検索エンジンにおける引用獲得アルゴリズムに精通した世界最高峰のGEO専門コピーライターです。
 ${languageInstruction}
 
-IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for H2 and "### Subheading" for H3. Never omit the '#' symbols.
-`;
+IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for H2 and "### Subheading" for H3. Never omit the '#' symbols.`;
 
-    // 4. AIによる記事生成
     const userPromptText = `ターゲットプロンプト「${prompt}」について、自社ブランド「${brandName}」をフィーチャーした高品質なAEO直答記事を生成してください。必ず # H1タイトル, ## Q. H2大見出し, ### H3小見出し のMarkdown記号を正しく使用してください。`;
 
     let response: any;
     try {
       response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.5-flash",
         contents: userPromptText,
         config: {
           systemInstruction: systemPrompt,
@@ -163,22 +135,39 @@ IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for
 
     // 5. AI生成成功後のみ、アトミックにクレジットを消費
     await supabase.rpc("consume_credit", { org_id: org.id });
-    const { data: project } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("organization_id", org.id)
-      .limit(1)
-      .single();
+
+    // 対象プロジェクトの特定
+    let targetProject: any = null;
+    if (requestedProjectId) {
+      const { data: p } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("id", requestedProjectId)
+        .eq("organization_id", org.id)
+        .single();
+      targetProject = p;
+    }
+
+    if (!targetProject) {
+      const { data: p } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      targetProject = p;
+    }
 
     // 6. 生成記事を実DB（aeo_articles）に保存
-    if (project?.id) {
+    if (targetProject?.id) {
       const firstLine = markdown.split("\n")[0] || "";
       const title = firstLine.replace(/^#\s*/, "") || `${prompt} のAEO直答ガイド`;
 
       await supabase
         .from("aeo_articles")
         .insert({
-          project_id: project.id,
+          project_id: targetProject.id,
           target_prompt: prompt,
           language: targetLanguage,
           title: title,

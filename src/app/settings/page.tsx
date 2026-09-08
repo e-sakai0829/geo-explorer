@@ -22,11 +22,14 @@ import {
   Loader2 
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProject } from "@/context/ProjectContext";
 
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
   const { lang, t } = useLanguage();
+  const { currentProject, refreshProjects } = useProject();
+
   const [userEmail, setUserEmail] = useState<string>("");
   const [targetBrand, setTargetBrand] = useState("自社ブランド");
   const [targetDomain, setTargetDomain] = useState("https://example.com");
@@ -35,6 +38,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10, resetAt: "2026-09-27" });
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -42,22 +46,6 @@ export default function SettingsPage() {
         setUserEmail(data.user.email);
       }
     });
-
-    // DBからプロジェクト設定を取得
-    fetch("/api/user/project")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.project) {
-          setTargetBrand(data.project.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
-          setTargetDomain(data.project.domain || "https://example.com");
-          setCompetitors(
-            Array.isArray(data.project.competitors) && data.project.competitors.length > 0
-              ? data.project.competitors.join(", ")
-              : ""
-          );
-        }
-      })
-      .catch(() => {});
 
     // DBからクレジット残高を取得
     fetch("/api/user/credits")
@@ -75,6 +63,19 @@ export default function SettingsPage() {
       })
       .catch(() => {});
   }, [supabase, lang]);
+
+  // 選択中プロジェクトの情報をフォームに反映
+  useEffect(() => {
+    if (currentProject) {
+      setTargetBrand(currentProject.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
+      setTargetDomain(currentProject.domain || "https://example.com");
+      setCompetitors(
+        Array.isArray(currentProject.competitors) && currentProject.competitors.length > 0
+          ? currentProject.competitors.join(", ")
+          : ""
+      );
+    }
+  }, [currentProject, lang]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -101,8 +102,6 @@ export default function SettingsPage() {
     }
   };
 
-  const [saveError, setSaveError] = useState<string | null>(null);
-
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -112,6 +111,7 @@ export default function SettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          projectId: currentProject?.id,
           name: targetBrand,
           domain: targetDomain,
           competitors: competitors.split(",").map((s) => s.trim()).filter(Boolean),
@@ -122,6 +122,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error || "設定の保存に失敗しました。");
 
       setSaved(true);
+      if (refreshProjects) await refreshProjects();
       setTimeout(() => setSaved(false), 4000);
     } catch (err: any) {
       setSaveError(err.message);

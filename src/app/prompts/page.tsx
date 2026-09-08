@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProject } from "@/context/ProjectContext";
 import type { PromptImportance } from "@/types/geo";
 
 interface RegisteredPrompt {
@@ -73,20 +74,32 @@ function PromptsContent() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const { projectId, currentProject } = useProject();
+
+  useEffect(() => {
+    if (currentProject) {
+      if (currentProject.name) setBrandName(currentProject.name);
+      if (currentProject.domain && !currentProject.domain.includes("example.com")) {
+        setProjectDomain(currentProject.domain);
+        setSuggestUrl(currentProject.domain);
+      }
+      if (Array.isArray(currentProject.competitors)) {
+        setCompetitors(currentProject.competitors);
+      }
+    }
+  }, [currentProject]);
 
   // 過去スキャン履歴の取得
   const fetchHistoryLogs = () => {
-    fetch("/api/user/logs")
+    const url = projectId ? `/api/user/logs?projectId=${projectId}` : "/api/user/logs";
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data?.logs) setHistoryLogs(data.logs);
+        else setHistoryLogs([]);
       })
       .catch(() => {});
   };
-
-  useEffect(() => {
-    fetchHistoryLogs();
-  }, []);
 
   // 履歴からの結果復元
   const handleRestoreLog = (log: any) => {
@@ -127,7 +140,8 @@ function PromptsContent() {
   const [registeringSuggestions, setRegisteringSuggestions] = useState(false);
 
   const fetchRegisteredPrompts = () => {
-    fetch("/api/user/prompts")
+    const url = projectId ? `/api/user/prompts?projectId=${projectId}` : "/api/user/prompts";
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data?.prompts)) setRegisteredPrompts(data.prompts);
@@ -136,8 +150,9 @@ function PromptsContent() {
   };
 
   useEffect(() => {
+    fetchHistoryLogs();
     fetchRegisteredPrompts();
-  }, []);
+  }, [projectId]);
 
   const promptCategories = ["すべて", ...Array.from(new Set(registeredPrompts.map((p) => p.category)))];
   const filteredPrompts = categoryFilter === "すべて"
@@ -152,7 +167,7 @@ function PromptsContent() {
       const res = await fetch("/api/user/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...manualPrompt, brandName }),
+        body: JSON.stringify({ ...manualPrompt, brandName, projectId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "登録に失敗しました。");
@@ -224,7 +239,7 @@ function PromptsContent() {
       const res = await fetch("/api/user/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompts: selected, brandName }),
+        body: JSON.stringify({ prompts: selected, brandName, projectId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "一括登録に失敗しました。");
@@ -953,7 +968,7 @@ function PromptsContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
-                {historyLogs.map((log) => (
+                {historyLogs.map((log: any) => (
                   <tr key={log.id} className="hover:bg-indigo-50/30 transition-colors">
                     <td className="py-3 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                       {new Date(log.date).toLocaleDateString("ja-JP")}

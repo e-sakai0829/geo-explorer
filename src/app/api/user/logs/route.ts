@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireProjectAccess } from "@/lib/require-project";
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,23 +22,32 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ logs: [] });
     }
 
-    // ユーザーのプロジェクトを取得
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id, name")
-      .eq("organization_id", org.id);
+    const reqProjectId = req.nextUrl.searchParams.get("projectId") || req.nextUrl.searchParams.get("project");
+    let targetProjectId = reqProjectId;
 
-    if (!projects || projects.length === 0) {
-      return NextResponse.json({ logs: [] });
+    if (targetProjectId) {
+      const validProject = await requireProjectAccess(supabase, org.id, targetProjectId);
+      if (!validProject) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+    } else {
+      const { data: firstProject } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (!firstProject) return NextResponse.json({ logs: [] });
+      targetProjectId = firstProject.id;
     }
 
-    const projectIds = projects.map((p) => p.id);
-
-    // プロジェクトに紐づくプロンプト一覧を取得
+    // 指定プロジェクトに紐づくプロンプト一覧を取得
     const { data: prompts } = await supabase
       .from("tracked_prompts")
       .select("id, prompt_text, created_at, last_scanned_at")
-      .in("project_id", projectIds)
+      .eq("project_id", targetProjectId)
       .order("last_scanned_at", { ascending: false })
       .limit(30);
 

@@ -18,9 +18,11 @@ import {
   RefreshCw
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProject } from "@/context/ProjectContext";
 
 export default function CitationsPage() {
   const { lang, t } = useLanguage();
+  const { currentProject } = useProject();
 
   const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
@@ -50,29 +52,39 @@ export default function CitationsPage() {
     ],
   };
 
-  // プロジェクト情報・過去スキャンログの取得
+  // プロジェクト情報・過去スキャンログの取得（プロジェクト切り替えに即応）
   useEffect(() => {
-    fetch("/api/user/project")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.project?.name) setBrandName(data.project.name);
-      })
-      .catch(() => {});
+    if (currentProject) {
+      if (currentProject.name) {
+        setBrandName(currentProject.name);
+      }
+    }
 
-    fetch("/api/user/logs")
+    const logUrl = currentProject?.id 
+      ? `/api/user/logs?projectId=${currentProject.id}` 
+      : "/api/user/logs";
+
+    fetch(logUrl)
       .then((res) => res.json())
       .then((data) => {
         if (data?.logs && data.logs.length > 0) {
           setPastLogs(data.logs);
           // 最新のログがあればその引用ソースを表示
           if (data.logs[0].citationSources && data.logs[0].citationSources.length > 0) {
-            setPrompt(data.logs[0].prompt);
+            setPrompt(data.logs[0].prompt || "");
             setRealSources(formatSources(data.logs[0].citationSources));
+          } else {
+            setRealSources([]);
           }
+        } else {
+          // 該当プロジェクトに過去ログがない場合（クリーンなコールドスタート）
+          setPastLogs([]);
+          setRealSources([]);
+          setPrompt("");
         }
       })
       .catch(() => {});
-  }, []);
+  }, [currentProject?.id, currentProject?.name]);
 
   // 引用ソースを分析用にフォーマット集計
   const formatSources = (sources: any[]) => {
@@ -108,9 +120,10 @@ export default function CitationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          brandName,
-          competitors: [],
+          brandName: currentProject?.name || brandName,
+          competitors: currentProject?.competitors || [],
           targetLocale: lang,
+          projectId: currentProject?.id,
         }),
       });
 
@@ -122,6 +135,20 @@ export default function CitationsPage() {
       } else {
         setRealSources([]);
       }
+
+      // 過去ログ一覧にも先頭に追加反映
+      setPastLogs((prev) => [
+        {
+          id: `recent-${Date.now()}`,
+          prompt,
+          brandMentioned: data.brandMentioned,
+          brandCited: data.brandCited,
+          ats: data.ats,
+          citationSources: data.citationSources || [],
+          scannedAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
     } catch (err: any) {
       alert(err.message);
     } finally {

@@ -16,9 +16,12 @@ import {
   ArrowRight
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProject } from "@/context/ProjectContext";
 
 export default function PerformancePage() {
   const { lang, t } = useLanguage();
+  const { currentProject } = useProject();
+
   const [brandName, setBrandName] = useState("自社ブランド");
   const [domain, setDomain] = useState("https://example.com");
   const [hasArticles, setHasArticles] = useState(false);
@@ -30,33 +33,41 @@ export default function PerformancePage() {
   const [activeReport, setActiveReport] = useState<any | null>(null);
 
   useEffect(() => {
-    fetch("/api/user/project")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.project) {
-          setBrandName(data.project.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
-          setDomain(data.project.domain || "https://example.com");
-        }
-      })
-      .catch(() => {});
-  }, [lang]);
+    if (currentProject) {
+      setBrandName(currentProject.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
+      setDomain(currentProject.domain || "https://example.com");
+    }
+  }, [currentProject, lang]);
 
-  // ローカルストレージからの復元
+  // プロジェクトごとの追跡アイテム復元
   useEffect(() => {
-    const saved = localStorage.getItem("geo_performance_tracked");
+    const storageKey = currentProject?.id 
+      ? `geo_performance_tracked_${currentProject.id}` 
+      : "geo_performance_tracked";
+
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         setTrackedItems(parsed);
-        if (parsed.length > 0) setHasArticles(true);
-      } catch (e) {}
+        setHasArticles(parsed.length > 0);
+      } catch (e) {
+        setTrackedItems([]);
+        setHasArticles(false);
+      }
+    } else {
+      setTrackedItems([]);
+      setHasArticles(false);
     }
-  }, []);
+  }, [currentProject?.id]);
 
   const saveTrackedItems = (items: any[]) => {
     setTrackedItems(items);
     setHasArticles(items.length > 0);
-    localStorage.setItem("geo_performance_tracked", JSON.stringify(items));
+    const storageKey = currentProject?.id 
+      ? `geo_performance_tracked_${currentProject.id}` 
+      : "geo_performance_tracked";
+    localStorage.setItem(storageKey, JSON.stringify(items));
   };
 
   // 公開URLの新規登録
@@ -94,8 +105,9 @@ export default function PerformancePage() {
         body: JSON.stringify({
           prompt: item.prompt,
           brandName: brandName,
-          competitors: [],
+          competitors: currentProject?.competitors || [],
           targetLocale: lang,
+          projectId: currentProject?.id,
         }),
       });
 

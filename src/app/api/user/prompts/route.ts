@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireProjectAccess } from "@/lib/require-project";
 
-async function getOrCreateProjectId(supabase: any, userId: string, brandName?: string) {
+async function resolveProjectId(supabase: any, userId: string, requestedId?: string | null, brandName?: string) {
   const { data: org } = await supabase
     .from("organizations")
     .select("id")
@@ -9,10 +10,17 @@ async function getOrCreateProjectId(supabase: any, userId: string, brandName?: s
     .single();
   if (!org) return null;
 
+  if (requestedId) {
+    const valid = await requireProjectAccess(supabase, org.id, requestedId);
+    if (!valid) return null;
+    return valid.id;
+  }
+
   const { data: project } = await supabase
     .from("projects")
     .select("id")
     .eq("organization_id", org.id)
+    .order("created_at", { ascending: true })
     .limit(1)
     .single();
 
@@ -34,8 +42,9 @@ export async function GET(req: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ prompts: [] });
 
-    const projectId = await getOrCreateProjectId(supabase, user.id);
-    if (!projectId) return NextResponse.json({ prompts: [] });
+    const reqProjectId = req.nextUrl.searchParams.get("projectId") || req.nextUrl.searchParams.get("project");
+    const projectId = await resolveProjectId(supabase, user.id, reqProjectId);
+    if (!projectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
     const { data: prompts } = await supabase
       .from("tracked_prompts")
@@ -62,9 +71,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const items = Array.isArray(body.prompts) ? body.prompts : [body];
 
-    const projectId = await getOrCreateProjectId(supabase, user.id, body.brandName);
+    const targetProjectId = body.projectId || req.nextUrl.searchParams.get("projectId") || req.nextUrl.searchParams.get("project");
+    const projectId = await resolveProjectId(supabase, user.id, targetProjectId, body.brandName);
     if (!projectId) {
-      return NextResponse.json({ error: "プロジェクトの特定に失敗しました。" }, { status: 500 });
+      return NextResponse.json({ error: "プロジェクトの特定に失敗しました。" }, { status: 404 });
     }
 
     const rows = items

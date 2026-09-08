@@ -21,23 +21,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ articles: [] });
     }
 
-    // ユーザーのプロジェクトを取得
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("organization_id", org.id);
+    const requestedProjectId = req.nextUrl.searchParams.get("projectId");
 
-    if (!projects || projects.length === 0) {
-      return NextResponse.json({ articles: [] });
+    // ユーザーのプロジェクトを取得
+    let targetProjectIds: string[] = [];
+    if (requestedProjectId) {
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("id", requestedProjectId)
+        .eq("organization_id", org.id)
+        .single();
+      if (proj) {
+        targetProjectIds = [proj.id];
+      }
     }
 
-    const projectIds = projects.map((p) => p.id);
+    if (targetProjectIds.length === 0) {
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("organization_id", org.id);
+      targetProjectIds = projects?.map((p) => p.id) || [];
+    }
+
+    if (targetProjectIds.length === 0) {
+      return NextResponse.json({ articles: [] });
+    }
 
     // aeo_articles テーブルから過去の生成記事を取得
     const { data: articles, error: dbError } = await supabase
       .from("aeo_articles")
       .select("id, project_id, target_prompt, language, title, content_markdown, created_at, status")
-      .in("project_id", projectIds)
+      .in("project_id", targetProjectIds)
       .order("created_at", { ascending: false })
       .limit(30);
 

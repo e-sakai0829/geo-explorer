@@ -19,10 +19,12 @@ import {
   FileDown
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProject } from "@/context/ProjectContext";
 
 function EditorInner() {
   const searchParams = useSearchParams();
   const { lang: uiLang, t } = useLanguage();
+  const { currentProject } = useProject();
 
   const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
@@ -34,19 +36,24 @@ function EditorInner() {
   const [error, setError] = useState<string | null>(null);
   const [articleLogs, setArticleLogs] = useState<any[]>([]);
 
-  // 過去の生成記事一覧を取得
+  // 過去の生成記事一覧を取得（プロジェクト別）
   const fetchArticleLogs = () => {
-    fetch("/api/user/articles")
+    const url = currentProject?.id 
+      ? `/api/user/articles?projectId=${currentProject.id}` 
+      : "/api/user/articles";
+
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data?.articles) setArticleLogs(data.articles);
+        else setArticleLogs([]);
       })
       .catch(() => {});
   };
 
   useEffect(() => {
     fetchArticleLogs();
-  }, []);
+  }, [currentProject?.id]);
 
   // 履歴からの復元表示
   const handleRestoreArticle = (art: any) => {
@@ -93,17 +100,12 @@ function EditorInner() {
     setTargetLanguage(uiLang);
   }, [uiLang]);
 
-  // DBからプロジェクト設定を取得
+  // プロジェクト設定の反映
   useEffect(() => {
-    fetch("/api/user/project")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.project?.name) {
-          setBrandName(data.project.name);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (currentProject?.name) {
+      setBrandName(currentProject.name);
+    }
+  }, [currentProject?.name]);
 
   // URLパラメータからの引き継ぎ
   useEffect(() => {
@@ -133,9 +135,10 @@ function EditorInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          brandName,
+          brandName: currentProject?.name || brandName,
           fanoutQueries,
           targetLanguage,
+          projectId: currentProject?.id,
         }),
       });
 

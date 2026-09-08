@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       competitors = [],
       targetLocale = "ja",
       category = "未分類",
+      projectId: requestedProjectId,
     } = await req.json();
 
     if (!prompt) {
@@ -63,17 +64,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
     }
 
-    // プロジェクトの登録ドメイン（自社サイト直接引用の判定に使用）
+    // 対象プロジェクトの解決（指定されたprojectId または 組織のデフォルトプロジェクト）
+    let activeProject: any = null;
     let targetDomain = "";
+
     if (orgObj) {
-      const { data: projectForDomain } = await supabase
-        .from("projects")
-        .select("domain")
-        .eq("organization_id", orgObj.id)
-        .limit(1)
-        .single();
-      targetDomain = projectForDomain?.domain || "";
+      if (requestedProjectId) {
+        const { data: p } = await supabase
+          .from("projects")
+          .select("id, domain, name, competitors")
+          .eq("id", requestedProjectId)
+          .eq("organization_id", orgObj.id)
+          .single();
+        activeProject = p;
+      }
+
+      if (!activeProject) {
+        const { data: p } = await supabase
+          .from("projects")
+          .select("id, domain, name, competitors")
+          .eq("organization_id", orgObj.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single();
+        activeProject = p;
+      }
+
+      targetDomain = activeProject?.domain || "";
     }
+
+    const effectiveBrandName = brandName && brandName !== "自社ブランド" 
+      ? brandName 
+      : (activeProject?.name || brandName);
+
+    const effectiveCompetitors = competitors && competitors.length > 0 
+      ? competitors 
+      : (activeProject?.competitors || []);
 
     const scanPrompt = buildScanPrompt(prompt, targetLocale);
     const { text, webSources, searchQueries: groundedQueries } = await runGeminiScan(scanPrompt, apiKey);
@@ -86,9 +112,9 @@ export async function POST(req: NextRequest) {
 
     // 共通エンジンでの評価（ATSスコア・順位推定・AIO表出状態・勝敗判定を一元計算）
     const evaluation = evaluateScan({
-      targetBrand: brandName,
+      targetBrand: effectiveBrandName,
       targetDomain,
-      competitors: Array.isArray(competitors) ? competitors : [],
+      competitors: Array.isArray(effectiveCompetitors) ? effectiveCompetitors : [],
       scanText: text,
       webSources,
       searchQueries,
@@ -102,24 +128,16 @@ export async function POST(req: NextRequest) {
       const { data: creditConsumed } = await supabase.rpc("consume_credit", { org_id: orgObj.id });
       creditsRemaining = Math.max(0, orgObj.monthly_credits - (orgObj.used_credits + 1));
 
-      let projectId = "";
-      const { data: project } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("organization_id", orgObj.id)
-        .limit(1)
-        .single();
+      let projectId = activeProject?.id || "";
 
-      if (project) {
-        projectId = project.id;
-      } else {
+      if (!projectId) {
         const { data: newProj } = await supabase
           .from("projects")
           .insert({
             organization_id: orgObj.id,
-            name: brandName,
+            name: effectiveBrandName,
             domain: "https://example.com",
-            competitors: competitors,
+            competitors: effectiveCompetitors,
           })
           .select("id")
           .single();
