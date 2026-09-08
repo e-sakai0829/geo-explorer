@@ -22,7 +22,7 @@ import { useLanguage } from "@/context/LanguageContext";
 export default function CitationsPage() {
   const { lang, t } = useLanguage();
 
-  const [prompt, setPrompt] = useState("パーパスブランディング 費用 比較");
+  const [prompt, setPrompt] = useState("");
   const [brandName, setBrandName] = useState("自社ブランド");
   const [loading, setLoading] = useState(false);
   const [pastLogs, setPastLogs] = useState<any[]>([]);
@@ -201,7 +201,7 @@ export default function CitationsPage() {
               type="text"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={lang === "zh-TW" ? "例如: B2B SaaS 比較 費用" : lang === "en" ? "e.g. Enterprise CRM Software Comparison" : "例: パーパスブランディング 費用 比較 / SaaS 営業DX"}
+              placeholder={lang === "zh-TW" ? "例如: B2B SaaS 比較 費用 / 企業行銷系統" : lang === "en" ? "e.g. Enterprise CRM Comparison / B2B SaaS" : "例: BtoBマーケティング ツール 比較 / SaaS 営業DX"}
               required
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
             />
@@ -266,7 +266,11 @@ export default function CitationsPage() {
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              KW: 「{prompt}」 {lang === "zh-TW" ? "AI 引用主要媒體清單" : lang === "en" ? "Top Cited Web Media List" : "で競合・AIが参照している主要メディア一覧"}
+              {prompt ? (
+                <>KW: 「{prompt}」 {lang === "zh-TW" ? "AI 引用主要媒體清單" : lang === "en" ? "Top Cited Web Media List" : "で競合・AIが参照している主要メディア一覧"}</>
+              ) : (
+                <>{lang === "zh-TW" ? "業界權威 AI 引用媒體範例（請在上方輸入關鍵字開始分析）" : lang === "en" ? "Industry Authority Media Benchmark (Enter a prompt above to scan)" : "業界標準 AI引用メディアのサンプル（上部の検索バーにキーワードを入力して解析を開始）"}</>
+              )}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               {lang === "zh-TW" 
@@ -277,8 +281,8 @@ export default function CitationsPage() {
             </p>
           </div>
 
-          <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-bold shrink-0">
-            ● {realSources.length > 0 ? (lang === "zh-TW" ? "即時 API 數據連動" : lang === "en" ? "Live API Connected" : "リアルタイムデータ解析中") : (lang === "zh-TW" ? "業界標準數據" : lang === "en" ? "Industry Benchmark" : "業界標準ベンチマーク")}
+          <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${realSources.length > 0 ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+            ● {realSources.length > 0 ? (lang === "zh-TW" ? "即時 API 數據連動" : lang === "en" ? "Live API Connected" : "リアルタイムデータ解析中") : (lang === "zh-TW" ? "業界基準參考" : lang === "en" ? "Sample Benchmark" : "業界標準ベンチマーク（参考サンプル）")}
           </span>
         </div>
 
