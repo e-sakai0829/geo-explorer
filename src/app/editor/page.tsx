@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Sparkles, 
@@ -21,44 +21,91 @@ import {
 import { useLanguage } from "@/context/LanguageContext";
 import { useProject } from "@/context/ProjectContext";
 
+import { qualityLabel } from "@/lib/measurement-display";
+import { ProjectAsyncGuard } from "@/lib/project-async-guard";
+import { loadEditorDraft, saveEditorDraft, isDraftUnsaved } from "@/lib/draft-storage";
+import { useRef } from "react";
+
 function EditorInner() {
   const searchParams = useSearchParams();
   const { lang: uiLang, t } = useLanguage();
-  const { currentProject } = useProject();
+  const { currentProject, projectId, loaded, ownerId } = useProject();
 
-  const [prompt, setPrompt] = useState("");
-  const [brandName, setBrandName] = useState("自社ブランド");
-  const [fanoutQueries, setFanoutQueries] = useState<string[]>([]);
-  const [targetLanguage, setTargetLanguage] = useState<"ja" | "zh-TW" | "en">(uiLang);
-  const [article, setArticle] = useState<string>("");
+  const scope = JSON.stringify([ownerId, projectId]);
+  const [initialDraft] = useState(() => loadEditorDraft(scope) ?? loadEditorDraft(projectId));
+  const [prompt, setPrompt] = useState(initialDraft?.prompt ?? ((searchParams.get("project") || searchParams.get("projectId")) === projectId ? searchParams.get("prompt") || "" : ""));
+  const [brandName, setBrandName] = useState(initialDraft?.brandName ?? currentProject?.name ?? "");
+  const [fanoutQueries] = useState<string[]>(() => {
+    if (initialDraft) return initialDraft.fanoutQueries || [];
+    if ((searchParams.get("project") || searchParams.get("projectId")) !== projectId) return [];
+    try { const queries = JSON.parse(searchParams.get("fanouts") || "[]"); return Array.isArray(queries) ? queries.filter(q => typeof q === "string") : []; } catch { return []; }
+  });
+  const [targetLanguage, setTargetLanguage] = useState<"ja" | "zh-TW" | "en">(initialDraft?.targetLanguage || uiLang);
+  const [article, setArticle] = useState<string>(initialDraft?.article || "");
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [articleLogs, setArticleLogs] = useState<any[]>([]);
 
-  // 過去の生成記事一覧を取得（プロジェクト別）
-  const fetchArticleLogs = () => {
-    const url = currentProject?.id 
-      ? `/api/user/articles?projectId=${currentProject.id}` 
-      : "/api/user/articles";
+  // Keyed by verified organization/project; legacy project-only drafts remain recoverable.
+  const asyncGuard = useRef(new ProjectAsyncGuard(projectId));
+  const editRevision = useRef(0);
+  const [storageFailed, setStorageFailed] = useState(() => isDraftUnsaved(scope));
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.articles) setArticleLogs(data.articles);
-        else setArticleLogs([]);
+  // 過去の生成記事一覧を取得（プロジェクト別・非同期ガード付き）
+  const fetchArticleLogs = () => {
+    if (!projectId || !loaded) {
+      setArticleLogs([]);
+      return;
+    }
+
+    const session = asyncGuard.current.start("article_logs", projectId);
+    if (!session) return;
+
+    fetch(`/api/user/articles?projectId=${projectId}`, { signal: session.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch logs");
+        return res.json();
       })
-      .catch(() => {});
+      .then((data) => {
+        if (!session.isCurrent()) return;
+        if (data?.articles && Array.isArray(data.articles)) {
+          setArticleLogs(data.articles);
+        } else {
+          setArticleLogs([]);
+        }
+      })
+      .catch((err) => {
+        if (!session.isCurrent() || ProjectAsyncGuard.isAbortError(err)) return;
+        setArticleLogs([]);
+      });
   };
 
+  useLayoutEffect(() => {
+    asyncGuard.current.setProjectId(projectId);
+    return () => { asyncGuard.current.cancelAll(); timers.current.forEach(clearTimeout); };
+  }, [projectId]);
+  useEffect(() => { fetchArticleLogs(); }, [projectId]);
   useEffect(() => {
-    fetchArticleLogs();
-  }, [currentProject?.id]);
+    setStorageFailed(!saveEditorDraft(scope, { prompt, article, targetLanguage, brandName, fanoutQueries }));
+  }, [scope, prompt, article, targetLanguage, brandName, fanoutQueries]);
 
-  // 履歴からの復元表示
+  const downloadDraft = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ projectId, prompt, article, targetLanguage, brandName, fanoutQueries }, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "GEO-draft.json";
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  };
+
+  // 手動編集時の自動保存
+  const handlePromptChange = (val: string) => { ++editRevision.current; setPrompt(val); };
+  const handleArticleChange = (val: string) => { ++editRevision.current; setArticle(val); };
   const handleRestoreArticle = (art: any) => {
-    setPrompt(art.prompt || art.title);
-    setArticle(art.contentMarkdown);
+    if (!art || !articleLogs.includes(art)) return;
+    ++editRevision.current;
+    setPrompt(art.prompt || art.title || ""); setArticle(art.contentMarkdown || "");
+    setTargetLanguage(art.language === "en" || art.language === "zh-TW" ? art.language : "ja");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -96,38 +143,20 @@ function EditorInner() {
     window.print();
   };
 
-  useEffect(() => {
-    setTargetLanguage(uiLang);
-  }, [uiLang]);
-
-  // プロジェクト設定の反映
-  useEffect(() => {
-    if (currentProject?.name) {
-      setBrandName(currentProject.name);
-    }
-  }, [currentProject?.name]);
-
-  // URLパラメータからの引き継ぎ
-  useEffect(() => {
-    const p = searchParams.get("prompt");
-    const fanouts = searchParams.get("fanouts");
-
-    if (p) setPrompt(p);
-    if (fanouts) {
-      try {
-        setFanoutQueries(JSON.parse(fanouts));
-      } catch (e) {
-        setFanoutQueries([]);
-      }
-    }
-  }, [searchParams]);
-
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt) return;
+    if (!prompt || !projectId || !loaded) return;
+
+    // 非同期要求セッションの発行（開始時projectIdの固定＋要求世代）
+    const session = asyncGuard.current.start("generate_article", projectId);
+    if (!session) return;
+
+    // 通信開始時点の手動編集スナップショットを記録
+    const initialRevision = editRevision.current;
 
     setLoading(true);
     setError(null);
+    setInfoMessage(null);
 
     try {
       const res = await fetch("/api/generate-article", {
@@ -135,33 +164,76 @@ function EditorInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          brandName: currentProject?.name || brandName,
+          brandName,
           fanoutQueries,
           targetLanguage,
-          projectId: currentProject?.id,
+          projectId: session.projectId,
         }),
+        signal: session.signal,
       });
 
       const data = await res.json();
+
+      // 応答適用直前にプロジェクト所属および要求世代を検証
+      if (!session.isCurrent()) {
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error || "記事生成に失敗しました。");
 
-      setArticle(data.article);
+      if (typeof data.article !== "string") throw new Error("Invalid article response");
+
+      // 通信中の手動編集保護: ユーザーが待機中に本文を編集していた場合、無条件に上書きしない
+      if (editRevision.current !== initialRevision) {
+        setInfoMessage(
+          uiLang === "zh-TW"
+            ? "已生成最新文章。因檢測到手動編輯，未覆蓋當前編輯內容。"
+            : uiLang === "en"
+            ? "Article generated. Manual edits detected; existing content preserved."
+            : "記事が生成されました。待機中の手動編集が検出されたため、入力中の本文は上書きせず保持しました。"
+        );
+      } else {
+        setArticle(data.article);
+        saveEditorDraft(scope, {
+          prompt,
+          article: data.article,
+          targetLanguage,
+          brandName,
+          fanoutQueries,
+        });
+      }
+
       fetchArticleLogs();
     } catch (err: any) {
+      // キャンセル時や旧世代の遅延catchは現在の画面状態を壊さない
+      if (!session.isCurrent() || ProjectAsyncGuard.isAbortError(err)) {
+        return;
+      }
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (session.isCurrent()) {
+        setLoading(false);
+      }
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(article);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    const session = asyncGuard.current.start("copy", projectId);
+    if (!session) return;
+    try {
+      await navigator.clipboard.writeText(article);
+      if (!session.isCurrent()) return;
+      setCopied(true);
+      timers.current.push(setTimeout(() => { if (session.isCurrent()) setCopied(false); }, 2000));
+    } catch { if (session.isCurrent()) setError("コピーできませんでした / Copy failed"); }
   };
+
+  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
+      {storageFailed && <p role="alert">{uiLang === "en" ? "Draft is not saved to this browser. Download it before closing this tab." : uiLang === "zh-TW" ? "草稿未儲存至瀏覽器。關閉分頁前請下載。" : "下書きをブラウザに保存できません。このタブを閉じる前にダウンロードしてください。"}<button type="button" onClick={downloadDraft}>下書き保存 / Download (.json)</button><button type="button" onClick={() => setStorageFailed(!saveEditorDraft(scope, { prompt, article, targetLanguage, brandName, fanoutQueries }))}>再試行 / Retry</button></p>}
+      <p className="text-xs text-slate-500">{uiLang === "en" ? "Switching projects hides pending results; server processing and credit usage may continue." : uiLang === "zh-TW" ? "切換專案會停止顯示等待中的結果；伺服器處理與額度使用可能繼續。" : "切替後は待機中の結果を表示しません。サーバー処理と利用枠の消費は続く場合があります。"}</p>
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
@@ -187,10 +259,11 @@ function EditorInner() {
               <input
                 type="text"
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => handlePromptChange(e.target.value)}
                 placeholder="例: 法人向け おすすめ 費用比較"
                 required
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                disabled={!projectId || !loaded}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden disabled:opacity-60"
               />
             </div>
 
@@ -199,9 +272,10 @@ function EditorInner() {
               <input
                 type="text"
                 value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
+                onChange={(e) => { ++editRevision.current; setBrandName(e.target.value); }}
                 required
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                disabled={!projectId || !loaded}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden disabled:opacity-60"
               />
             </div>
 
@@ -210,7 +284,7 @@ function EditorInner() {
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setTargetLanguage("ja")}
+                  onClick={() => { ++editRevision.current; setTargetLanguage("ja"); }}
                   className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                     targetLanguage === "ja"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs"
@@ -221,7 +295,7 @@ function EditorInner() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTargetLanguage("zh-TW")}
+                  onClick={() => { ++editRevision.current; setTargetLanguage("zh-TW"); }}
                   className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                     targetLanguage === "zh-TW"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs"
@@ -232,7 +306,7 @@ function EditorInner() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTargetLanguage("en")}
+                  onClick={() => { ++editRevision.current; setTargetLanguage("en"); }}
                   className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                     targetLanguage === "en"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs"
@@ -275,13 +349,23 @@ function EditorInner() {
               </div>
             )}
 
+            {infoMessage && (
+              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl">
+                {infoMessage}
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !projectId || !loaded}
               className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {t.editor_btn_generate}
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {!loaded ? "プロジェクト読み込み中..." : !projectId ? "プロジェクト未選択" : t.editor_btn_generate}
             </button>
 
             {/* Quality Guideline Notice (信頼性を高める注記カード) */}
@@ -301,9 +385,34 @@ function EditorInner() {
         <div className="lg:col-span-7">
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs h-full flex flex-col min-h-[550px]">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-bold text-slate-900">{t.editor_preview_title}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  <span>{t.editor_preview_title}</span>
+                </div>
+
+                {article && (
+                  <div className="flex items-center p-0.5 bg-slate-100 rounded-lg text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("preview")}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        viewMode === "preview" ? "bg-white text-indigo-700 shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      プレビュー
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("edit")}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        viewMode === "edit" ? "bg-white text-indigo-700 shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      手動編集
+                    </button>
+                  </div>
+                )}
               </div>
 
               {article && (
@@ -350,15 +459,37 @@ function EditorInner() {
                 <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-700">
                   <div><strong>ターゲットプロンプト:</strong> {prompt}</div>
                   <div><strong>対象ブランド:</strong> {brandName}</div>
+                  <div>{qualityLabel(uiLang)}</div>
                 </div>
               </div>
             )}
 
+            {/* Quality Status Bar */}
+            {article && (
+              <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] text-slate-500 print:hidden">
+                <span className="inline-flex items-center gap-1 font-bold text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded text-[10px]">
+                  {qualityLabel(uiLang)}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {storageFailed ? "未保存 / Unsaved" : "保存済み / Saved"}
+                </span>
+              </div>
+            )}
+
             <div className="flex-1 p-6 overflow-y-auto">
-              {article ? (
-                <div className="prose prose-slate prose-sm max-w-none text-xs text-slate-800 leading-relaxed font-sans whitespace-pre-wrap">
-                  {article}
-                </div>
+              {article || viewMode === "edit" ? (
+                viewMode === "edit" ? (
+                  <textarea
+                    value={article}
+                    onChange={(e) => handleArticleChange(e.target.value)}
+                    className="w-full h-full min-h-[400px] p-3 text-xs text-slate-800 font-mono leading-relaxed bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-600 focus:outline-hidden"
+                    placeholder="マークダウン原稿を手動編集..."
+                  />
+                ) : (
+                  <div className="prose prose-slate prose-sm max-w-none text-xs text-slate-800 leading-relaxed font-sans whitespace-pre-wrap">
+                    {article}
+                  </div>
+                )
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300">
@@ -393,6 +524,7 @@ function EditorInner() {
                   <th className="py-3 px-3">作成日時</th>
                   <th className="py-3 px-3">記事タイトル / ターゲットプロンプト</th>
                   <th className="py-3 px-3">執筆言語</th>
+                  <th className="py-3 px-3 text-center">{uiLang === "en" ? "Quality" : uiLang === "zh-TW" ? "品質評估" : "品質評価"}</th>
                   <th className="py-3 px-3 text-right">操作（ダウンロード・印刷）</th>
                 </tr>
               </thead>
@@ -409,6 +541,11 @@ function EditorInner() {
                     <td className="py-3 px-3">
                       <span className="inline-flex items-center gap-1 font-bold text-[11px]">
                         {art.language === "zh-TW" ? "🇹🇼 繁體中文" : art.language === "en" ? "🇺🇸 English" : "🇯🇵 日本語"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {qualityLabel(uiLang)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
@@ -430,7 +567,8 @@ function EditorInner() {
                       <button
                         onClick={() => {
                           handleRestoreArticle(art);
-                          setTimeout(() => window.print(), 300);
+                          const session = asyncGuard.current.start("print", projectId);
+                          timers.current.push(setTimeout(() => { if (session?.isCurrent()) window.print(); }, 300));
                         }}
                         className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-[11px] inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                       >
@@ -454,9 +592,11 @@ function EditorInner() {
 }
 
 export default function EditorPage() {
+  const { projectId, ownerId, loaded } = useProject();
+  if (!loaded || !projectId || !ownerId) return <p role="status">プロジェクトを選択してください / Select a project</p>;
   return (
     <Suspense fallback={<div className="p-8 text-xs text-slate-500">読み込み中...</div>}>
-      <EditorInner />
+      <EditorInner key={JSON.stringify([ownerId, projectId])} />
     </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { 
   TrendingUp, 
@@ -18,9 +18,15 @@ import {
 import { useLanguage } from "@/context/LanguageContext";
 import { useProject } from "@/context/ProjectContext";
 
-export default function PerformancePage() {
+import { sanitizeTrackedItems, observationLabel, observationState, trackedCitationSummary } from "@/lib/measurement-display";
+import { ProjectAsyncGuard } from "@/lib/project-async-guard";
+
+// Failed writes remain recoverable during same-tab project navigation.
+const transientItems = new Map<string, any[]>();
+
+function PerformanceInner() {
   const { lang, t } = useLanguage();
-  const { currentProject } = useProject();
+  const { currentProject, projectId, loaded, ownerId } = useProject();
 
   const [brandName, setBrandName] = useState("自社ブランド");
   const [domain, setDomain] = useState("https://example.com");
@@ -32,6 +38,13 @@ export default function PerformancePage() {
   const [rescanningId, setRescanningId] = useState<string | null>(null);
   const [activeReport, setActiveReport] = useState<any | null>(null);
 
+  const [storageFailed, setStorageFailed] = useState(false);
+  const itemsRef = useRef(trackedItems);
+  const rescanBusy = useRef(false);
+  const storageKey = "geo_performance_tracked_" + JSON.stringify([ownerId, projectId]);
+  // 非同期セッション管理ガード
+  const asyncGuard = useRef(new ProjectAsyncGuard(projectId));
+
   useEffect(() => {
     if (currentProject) {
       setBrandName(currentProject.name || (lang === "zh-TW" ? "自社品牌" : lang === "en" ? "My Brand" : "自社ブランド"));
@@ -39,19 +52,39 @@ export default function PerformancePage() {
     }
   }, [currentProject, lang]);
 
-  // プロジェクトごとの追跡アイテム復元
-  useEffect(() => {
-    const storageKey = currentProject?.id 
-      ? `geo_performance_tracked_${currentProject.id}` 
-      : "geo_performance_tracked";
+  useLayoutEffect(() => () => asyncGuard.current.cancelAll(), []);
 
-    const saved = localStorage.getItem(storageKey);
+  // プロジェクトごとの追跡アイテム復元・プロジェクト切替時クリーンアップ
+  useEffect(() => {
+    // 切替時は旧プロジェクトの進行中通信を全キャンセルし、別プロジェクトのレポート表示を閉じる
+    asyncGuard.current.setProjectId(projectId);
+    setActiveReport(null);
+    setRescanningId(null);
+
+    if (!projectId || !loaded) {
+      setTrackedItems([]);
+      setHasArticles(false);
+      return;
+    }
+
+
+    itemsRef.current = [];
+    let saved: string | null = null;
+    try {
+      setStorageFailed(transientItems.has(storageKey));
+      saved = transientItems.has(storageKey) ? JSON.stringify(transientItems.get(storageKey)) : typeof window !== "undefined" ? (localStorage.getItem(storageKey) ?? localStorage.getItem(`geo_performance_tracked_${projectId}`)) : null;
+    } catch {
+      setStorageFailed(true);
+    }
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setTrackedItems(parsed);
-        setHasArticles(parsed.length > 0);
-      } catch (e) {
+        const sanitized = sanitizeTrackedItems(parsed);
+        itemsRef.current = sanitized;
+        setTrackedItems(sanitized);
+        setHasArticles(sanitized.length > 0);
+      } catch {
         setTrackedItems([]);
         setHasArticles(false);
       }
@@ -59,29 +92,43 @@ export default function PerformancePage() {
       setTrackedItems([]);
       setHasArticles(false);
     }
-  }, [currentProject?.id]);
+
+    return () => {
+      asyncGuard.current.cancelAll();
+    };
+  }, [projectId, loaded]);
 
   const saveTrackedItems = (items: any[]) => {
+    if (!projectId) return;
+    transientItems.set(storageKey, items);
+    itemsRef.current = items;
     setTrackedItems(items);
     setHasArticles(items.length > 0);
-    const storageKey = currentProject?.id 
-      ? `geo_performance_tracked_${currentProject.id}` 
-      : "geo_performance_tracked";
-    localStorage.setItem(storageKey, JSON.stringify(items));
+
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(storageKey, JSON.stringify(items));
+        transientItems.delete(storageKey);
+        setStorageFailed(false);
+      }
+    } catch {
+      setStorageFailed(true);
+    }
   };
 
   // 公開URLの新規登録
   const handleRegisterUrl = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPrompt || !newUrl) return;
+    if (!newPrompt || !newUrl || !projectId || !loaded) return;
 
     const newItem = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       prompt: newPrompt,
       url: newUrl,
       date: new Date().toISOString(),
       status: "pending",
-      beforeStatus: lang === "zh-TW" ? "未提及・競品佔有" : lang === "en" ? "Not Mentioned / Competitor Occupied" : "未言及・他社メディア占有",
+      hasBaseline: false,
+      beforeStatus: lang === "zh-TW" ? "基準未測定 (無公開前數據)" : lang === "en" ? "Baseline Unmeasured" : "ベースライン未測定 (施策前データなし)",
       afterStatus: lang === "zh-TW" ? "索引與AI學習中 (需再次掃描)" : lang === "en" ? "Indexing & AI Learning (Rescan Required)" : "インデックス・AI学習待ち (要再スキャン)",
       lastScannedAt: null,
       aiResponse: null,
@@ -89,40 +136,56 @@ export default function PerformancePage() {
       brandCited: false,
     };
 
-    const updated = [newItem, ...trackedItems];
+    const updated = [newItem, ...itemsRef.current];
     saveTrackedItems(updated);
     setNewPrompt("");
     setNewUrl("");
   };
 
-  // 1クレジットを使って効果測定（再スキャン）を実行
+  // 1クレジットを使って効果測定（再スキャン）を実行（所属固定・世代ガード付き）
   const handleRescan = async (item: any) => {
+    if (!projectId || !loaded || rescanBusy.current) return;
+
+    const channel = "rescan";
+    const session = asyncGuard.current.start(channel, projectId);
+    if (!session) return;
+
+    rescanBusy.current = true;
+    setActiveReport(null);
     setRescanningId(item.id);
+
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: item.prompt,
-          brandName: brandName,
+          brandName,
           competitors: currentProject?.competitors || [],
           targetLocale: lang,
-          projectId: currentProject?.id,
+          projectId: session.projectId,
         }),
+        signal: session.signal,
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || (lang === "zh-TW" ? "再次掃描驗證失敗" : lang === "en" ? "Rescan failed" : "再検証スキャンに失敗しました。"));
 
-      const updated = trackedItems.map((t) => {
+      // 応答適用直前にプロジェクト所属および要求世代を検証
+      if (!session.isCurrent()) {
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || (lang === "zh-TW" ? "再次掃描驗證失敗" : lang === "en" ? "Rescan failed" : "再検証スキャンに失敗しました。"));
+      }
+
+      const updated = itemsRef.current.map((t) => {
         if (t.id === item.id) {
           return {
             ...t,
-            status: "verified",
-            lastScannedAt: new Date().toISOString(),
-            afterStatus: data.brandCited 
-              ? (lang === "zh-TW" ? "🟢 已獲得自社網域引用！" : lang === "en" ? "🟢 Won Direct Citation!" : "🟢 自社URL参照を獲得！")
-              : (lang === "zh-TW" ? "🟡 已提及品牌 (持續補強中)" : lang === "en" ? "🟡 Mentioned (Enhance content)" : "🟡 言及認知あり (引用奪還へ向けて継続補強)"),
+            status: data.outcome === "unmeasured" ? "pending" : "verified",
+            promptId: data.promptId, surface: data.surface, scoreVersion: data.scoreVersion, modelName: data.modelName, locale: data.locale, outcome: data.outcome,
+            lastScannedAt: data.measuredAt || new Date().toISOString(),
             brandMentioned: data.brandMentioned,
             brandCited: data.brandCited,
             aiResponse: data.aiResponse,
@@ -134,16 +197,27 @@ export default function PerformancePage() {
 
       saveTrackedItems(updated);
       const currentVerified = updated.find((t) => t.id === item.id);
-      setActiveReport(currentVerified);
+      if (session.isCurrent()) {
+        setActiveReport(currentVerified);
+      }
     } catch (err: any) {
+      if (!session.isCurrent() || ProjectAsyncGuard.isAbortError(err)) {
+        return;
+      }
       alert(err.message);
     } finally {
-      setRescanningId(null);
+      if (session.isCurrent()) {
+        rescanBusy.current = false;
+        setRescanningId(null);
+      }
     }
   };
 
+  const citationSummary = trackedCitationSummary(trackedItems, "gemini-3.6-flash", lang === "en" ? "en-US" : lang === "ja" ? "ja-JP" : "zh-TW");
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16 font-sans antialiased text-slate-900">
+      {storageFailed && <p role="alert">{lang === "en" ? "Changes are not saved. Keep this page open and retry saving." : lang === "zh-TW" ? "變更尚未儲存。請保留此頁面並重試儲存。" : "変更を保存できません。この画面を閉じずに保存を再試行してください。"}<button onClick={() => saveTrackedItems(itemsRef.current)}>再試行 / Retry</button></p>}
+      <p className="text-xs text-slate-500">{lang === "en" ? "Switching projects hides pending results; processing and credit usage may continue." : lang === "zh-TW" ? "切換專案後不顯示等待中的結果；處理與額度使用可能繼續。" : "切替後は待機中の結果を表示しません。処理と利用枠の消費は続く場合があります。"}</p>
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
@@ -240,28 +314,21 @@ export default function PerformancePage() {
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="text-xs font-semibold text-slate-500">AI Overviews {lang === "zh-TW" ? "引用獲得率" : lang === "en" ? "Citation Win Rate" : "引用獲得率"}</div>
-          <div className="text-3xl font-black text-indigo-600 tracking-tight">
-            {trackedItems.length > 0 
-              ? `${Math.round((trackedItems.filter((t) => t.brandCited).length / trackedItems.length) * 100)}%` 
-              : "—"}
-          </div>
-          <div className="text-[11px] text-slate-400">
-            {trackedItems.length > 0 
-              ? (lang === "zh-TW" ? `已獲得: ${trackedItems.filter((t) => t.brandCited).length} / ${trackedItems.length} 篇` : lang === "en" ? `Won: ${trackedItems.filter((t) => t.brandCited).length} / ${trackedItems.length}` : `獲得件数: ${trackedItems.filter((t) => t.brandCited).length} / ${trackedItems.length} 本`)
-              : (lang === "zh-TW" ? "註冊 URL 後開啟追蹤掃描" : lang === "en" ? "Tracking begins upon registration" : "URL登録後に追跡スキャンが有効化されます")}
-          </div>
+          <div className="text-xs font-semibold text-slate-500">Gemini API / v2 引用率</div>
+          <p className="text-xs">gemini-3.6-flash / {lang} / 同一プロンプトの最新成功のみ</p>
+          <div className="text-3xl font-black text-indigo-600">{citationSummary.rate === null ? '未計測' : Math.round(citationSummary.rate * 100) + '%'}</div>
+          <p className="text-xs">引用 {citationSummary.cited} / 計測済み {citationSummary.count}件（この端末の保存記録）</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-semibold text-slate-500">
             {lang === "zh-TW" ? "預估獲得引用平均天數" : lang === "en" ? "Est. Days to Citation" : "平均引用獲得までの目安"}
           </div>
-          <div className="text-3xl font-black text-slate-900 tracking-tight">
-            14 <span className="text-xs font-normal text-slate-400">{lang === "zh-TW" ? "天" : lang === "en" ? "Days" : "日"}</span>
+          <div className="text-3xl font-black text-slate-400 tracking-tight">
+            {lang === "zh-TW" ? "未測定" : lang === "en" ? "Unmeasured" : "未計測"}
           </div>
           <div className="text-[11px] text-slate-400">
-            {lang === "zh-TW" ? "從專文發布至獲得 AIO 引用" : lang === "en" ? "From AEO published to AIO citation" : "AEO 記事公開から AIO ソース採用まで"}
+            {lang === "zh-TW" ? "需累積足夠追蹤歷程方可呈現" : lang === "en" ? "Requires sufficient tracked history" : "十分な追跡履歴が蓄積されるまで未計測"}
           </div>
         </div>
       </div>
@@ -309,26 +376,27 @@ export default function PerformancePage() {
                       </a>
                     </td>
                     <td className="py-3 px-3 font-semibold text-xs">
-                      {item.brandCited ? (
+                      {observationState(item) === "cited" ? (
                         <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-xs font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {lang === "zh-TW" ? "已獲得自社網域引用！" : lang === "en" ? "Direct Citation Won!" : "直接参照を獲得！"}
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {observationLabel(item, lang)}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 text-[11px]">
-                          {item.afterStatus}
+                          {observationLabel(item, lang)}
                         </span>
                       )}
                     </td>
                     <td className="py-3 px-3 text-right space-x-2 whitespace-nowrap">
                       <button
                         onClick={() => handleRescan(item)}
-                        disabled={rescanningId === item.id}
+                        disabled={rescanningId !== null}
                         className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold rounded-lg transition-colors text-xs inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>{rescanningId === item.id ? (lang === "zh-TW" ? "掃描中..." : lang === "en" ? "Scanning..." : "再スキャン中...") : (lang === "zh-TW" ? "1額度再次驗證" : lang === "en" ? "1-Credit Rescan" : "1クレジットで再検証")}</span>
                       </button>
 
+                      <p className="text-xs text-slate-500">{item.surface === "gemini_api" && item.scoreVersion === "v2" ? 'Gemini API / v2 / ' + item.modelName + ' / ' + item.locale : '旧記録（観測面・採点版未確認）'}</p>
                       {item.lastScannedAt && (
                         <button
                           onClick={() => setActiveReport(item)}
@@ -363,7 +431,7 @@ export default function PerformancePage() {
               </div>
               <div>
                 <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
-                  {lang === "zh-TW" ? "成效實證 Before / After 報告" : lang === "en" ? "Proven Impact Before / After Report" : "成果実証 Before / After レポート"}
+                  {lang === "zh-TW" ? "AEO 觀測報告（基準未測定）" : lang === "en" ? "AEO Observation Report (Baseline Unmeasured)" : "AEO観測レポート（ベースライン未測定）"}
                 </span>
                 <h3 className="text-lg font-bold text-white tracking-tight mt-0.5">
                   {lang === "zh-TW" ? "關鍵字" : lang === "en" ? "Keyword" : "キーワード"}: 「{activeReport.prompt}」
@@ -375,43 +443,27 @@ export default function PerformancePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {/* Before */}
             <div className="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 space-y-2">
-              <span className="text-[10px] font-extrabold text-rose-400 bg-rose-500/20 px-2.5 py-0.5 rounded-full border border-rose-500/30 uppercase tracking-wider">
-                Before ({lang === "zh-TW" ? "對策前" : lang === "en" ? "Unoptimized" : "対策前"})
+              <span className="text-[10px] font-extrabold text-slate-400 bg-slate-700/50 px-2.5 py-0.5 rounded-full border border-slate-600 uppercase tracking-wider">
+                Before ({lang === "zh-TW" ? "公開前" : lang === "en" ? "Pre-Release" : "公開前"})
               </span>
               <h4 className="text-sm font-bold text-slate-200">
-                {lang === "zh-TW" ? "AI 解答僅獨占引用競品或外部媒體" : lang === "en" ? "AI Overviews Exclusively Cited Competitors" : "AI回答内で他社メディアのみが独占参照"}
+                {lang === "zh-TW" ? "公開前基準未測定" : lang === "en" ? "Baseline unmeasured" : "施策前ベースライン未測定"}
               </h4>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                {lang === "zh-TW"
-                  ? "自社官方網域未被引用，高意向流量被競品比較媒體或新聞奪取。"
-                  : lang === "en"
-                  ? "No official domain citations; high-intent search traffic was lost to competitor media."
-                  : "自社公式ドメインからの引用がなく、他社の比較サイトやニュースメディアにAI検索ユーザーの流入を奪われている状態。"}
+                {lang === "zh-TW" ? "沒有可驗證的事前觀測記錄，無法比較前後變化。" : lang === "en" ? "No verifiable baseline record is available; before/after comparison is unavailable." : "検証可能な事前観測記録がないため、施策前後は比較できません。"}
               </p>
             </div>
 
             {/* After */}
             <div className="bg-indigo-900/60 p-5 rounded-2xl border border-indigo-400/40 space-y-2">
               <span className="text-[10px] font-extrabold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30 uppercase tracking-wider">
-                After ({lang === "zh-TW" ? "AEO專文發布後" : lang === "en" ? "AEO Published" : "AEO記事公開後"})
+                After ({lang === "zh-TW" ? "最新觀測" : lang === "en" ? "Latest Scan" : "最新観測"})
               </span>
               <h4 className="text-sm font-bold text-emerald-300">
-                {activeReport.brandCited 
-                  ? (lang === "zh-TW" ? "🎉 自社網站 URL 成功奪取 AI 直接引用區塊！" : lang === "en" ? "🎉 Official URL Won Direct AI Citation Card!" : "🎉 自社サイトURLがAIの直接参照枠を獲得！")
-                  : (lang === "zh-TW" ? "AI 知識空間中品牌提及度提升" : lang === "en" ? "Brand Awareness Enhanced in AI Knowledge Space" : "AIナレッジ空間でブランドが言及認知向上")}
+                {observationLabel(activeReport, lang)}
               </h4>
               <p className="text-slate-200 text-[11px] leading-relaxed">
-                {activeReport.brandCited
-                  ? (lang === "zh-TW" 
-                    ? `自社網域（${activeReport.url}）獲採用為 Google AI Overviews 官方引用卡片，獲取高意向自然流量。` 
-                    : lang === "en"
-                    ? `Official domain (${activeReport.url}) adopted as a Google AI Overviews Web Card, capturing high-intent organic traffic.`
-                    : `自社ドメイン（${activeReport.url}）がGoogle AI Overviewsの公式参照カードとして採用され、検索ユーザーからの信頼流入を獲得。`)
-                  : (lang === "zh-TW"
-                    ? `自社品牌名已出現在 AI 解答本文中。請持續補強專文內容以奪取引用卡片。`
-                    : lang === "en"
-                    ? `Brand name now mentioned in AI response. Continue enhancing content to capture the Web Card.`
-                    : `自社ブランド名がAI回答本文に登場。引用URL枠の奪還に向けてコンテンツを維持・拡充してください。`)}
+                {lang === "zh-TW" ? "網域層級的觀測不代表此登錄文章 URL 已被引用。" : lang === "en" ? "A domain-level observation does not confirm citation of this registered article URL." : "ドメイン単位の観測であり、登録した記事URL自体の引用を示すものではありません。"}
               </p>
             </div>
           </div>
@@ -420,10 +472,10 @@ export default function PerformancePage() {
             <div className="bg-slate-800/90 p-4 rounded-xl border border-slate-700 text-xs space-y-2">
               <div className="text-indigo-300 font-bold flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                {lang === "zh-TW" ? "最新 Gemini 掃描解答結果" : lang === "en" ? "Latest Gemini Scan Response" : "最新のGeminiスキャン回答結果"}
+                {lang === "zh-TW" ? "最新 Gemini 掃描解答結果" : lang === "en" ? "Latest Gemini Scan Response" : "最新の保存済み回答結果"}
               </div>
               <p className="text-slate-300 text-[11px] leading-relaxed whitespace-pre-wrap font-sans">
-                {activeReport.aiResponse}
+                {activeReport.surface === 'gemini_api' && activeReport.scoreVersion === 'v2' ? 'Gemini API / v2 / ' + activeReport.modelName + ' / ' + activeReport.locale : '旧記録（観測面・採点版未確認）'}{'\n'}{activeReport.aiResponse}
               </p>
             </div>
           )}
@@ -434,31 +486,37 @@ export default function PerformancePage() {
       <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl text-white space-y-3 shadow-md border border-indigo-500/30">
         <div className="font-bold text-xs text-indigo-300 flex items-center gap-2">
           <Bot className="w-4 h-4" />
-          {lang === "zh-TW" ? "【參考】AEO 策略獲得引用流程 (實證模型)" : lang === "en" ? "[Reference] AEO Citation Acquisition Flow" : "【参考】AEO 施策による引用獲得フロー（実証モデル）"}
+          {lang === "zh-TW" ? "【參考】AEO 引用獲得架構示意模型（非個別實測保證）" : lang === "en" ? "[Reference] AEO Citation Mechanism Model (Not a Guarantee)" : "【参考】AEO 施策による引用獲得モデル（※一般的な挙動シミュレーションであり、個別ドメインの実測保証ではありません）"}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
           <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700 space-y-1">
-            <div className="font-bold text-rose-400">{lang === "zh-TW" ? "Before（對策前）" : lang === "en" ? "Before (Unoptimized)" : "Before（施策前）"}</div>
+            <div className="font-bold text-slate-400">{lang === "zh-TW" ? "施策前（典型情境）" : lang === "en" ? "Pre-Implementation (Typical)" : "施策前（典型的な課題例）"}</div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
               {lang === "zh-TW"
-                ? "• AI Overviews 完全未提及自社品牌（推薦率 0%）\n• 競品品牌獨占 AI 摘要之推薦解答"
+                ? "• AI 摘要完全未提及自社品牌\n• 比較媒體或競品獲得較多引用機會"
                 : lang === "en"
-                ? "• Zero brand mentions in AI Overviews (0% Share of Model)\n• Competitors exclusively recommended in AI summaries"
-                : "• AI Overviews に自社ブランドが一切言及されない（言及率 0%）\n• 競合他社のみが AI の「おすすめ」として回答文に独占露出"}
+                ? "• No baseline measurement"
+                : "• AI回答内で自社ブランドへの言及や引用が見当たらない状態\n• 比較サイトや競合メディアのみが情報源として参照される傾向"}
             </p>
           </div>
           <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700 space-y-1">
-            <div className="font-bold text-emerald-400">{lang === "zh-TW" ? "After（AEO 專文發布後）" : lang === "en" ? "After (AEO Published)" : "After（AEO 記事公開後）"}</div>
+            <div className="font-bold text-emerald-400">{lang === "zh-TW" ? "專文對策後（目標狀態）" : lang === "en" ? "Post-Optimization (Target State)" : "対策後（目標状態）"}</div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
               {lang === "zh-TW"
-                ? "• 35〜65 字「精準直答區塊」直接被 AI 引用為標準解答\n• 自社網域登上 AI 引用來源連結第 1 位，獲取高意向自然流量"
+                ? "• 透過 35-65 字直答與結構化標籤，提升 AI 引用機會\n• 建立自社一次情報來源以爭取引用卡片"
                 : lang === "en"
-                ? "• 35–65 word direct-answer block directly cited in AI answer\n• Gained #1 citation link in Google AI Overviews, driving high-intent traffic"
-                : "• 35〜65文字の「直答ブロック」が AI 回答文にそのまま引用\n• AI ソースリンク（1位）に自社ドメインが掲載され、検索流入を獲得"}
+                ? "• 35-65 character direct answers and schema markup increase citation likelihood\n• Primary domain established as authoritative reference"
+                : "• 35〜65文字の直答構造とFAQ構造化により、AIの引用可能性を高める\n• 自社一次ソースとしての認知を確立し、公式参照カードの獲得を目指す"}
             </p>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+export default function PerformancePage() {
+  const { projectId, ownerId, loaded } = useProject();
+  if (!loaded || !projectId || !ownerId) return <p role="status">プロジェクトを選択してください / Select a project</p>;
+  return <PerformanceInner key={JSON.stringify([ownerId, projectId])} />;
 }

@@ -178,7 +178,7 @@ IMPORTANT: You MUST start the output with "# Title" and use "## Q. Question" for
           title: title,
           content_markdown: markdown,
           fanout_queries_covered: fanoutQueries,
-          aeo_score: 95,
+          aeo_score: null,
           status: "draft",
         });
     }

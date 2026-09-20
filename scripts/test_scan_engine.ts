@@ -22,7 +22,7 @@ const r3 = estimateRank(text3, "NotePM");
 console.log("Test3 (リスト外の本文言及のみ):", r3);
 if (r3.rank !== 0 || !r3.mentionedInText) throw new Error("Test3 FAILED");
 
-// evaluateScan: AIO非表出 / 表出推奨 / 表出非推奨の3値判定
+// evaluateScan: Gemini API回答なし / 表出推奨 / 表出非推奨の3値判定
 const notShown = evaluateScan({
   targetBrand: "NotePM",
   targetDomain: "https://notepm.jp",
@@ -31,7 +31,7 @@ const notShown = evaluateScan({
   webSources: [],
   searchQueries: [],
 });
-console.log("\nTest4 (AIO非表出 not_shown):", notShown.aioStatus, notShown.rank);
+console.log("\nTest4 (Gemini API回答なし not_shown):", notShown.aioStatus, notShown.rank);
 if (notShown.aioStatus !== "not_shown") throw new Error("Test4 FAILED");
 
 const shownRecommended = evaluateScan({
@@ -44,6 +44,6 @@ const shownRecommended = evaluateScan({
 });
 console.log("Test5 (表出かつ2位=推奨 shown_recommended):", shownRecommended.aioStatus, shownRecommended.rank, shownRecommended.winLoss);
 if (shownRecommended.aioStatus !== "shown_recommended") throw new Error("Test5 FAILED");
-if (shownRecommended.winLoss !== "draw") throw new Error("Test5 winLoss FAILED");
+if (shownRecommended.winLoss !== "not_applicable") throw new Error("Test5 winLoss FAILED");
 
 console.log("\n=== 全テスト成功 ===");

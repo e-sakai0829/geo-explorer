@@ -114,7 +114,8 @@ export async function PUT(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "idが必要です。" }, { status: 400 });
 
     const update: Record<string, any> = {};
-    if (promptText !== undefined) update.prompt_text = promptText;
+    // A changed question is a new observation series; never mutate historical prompt identity.
+    if (promptText !== undefined) return NextResponse.json({ error: "文面の変更は新しいプロンプトとして登録してください。", code: "NEW_PROMPT_REQUIRED" }, { status: 409 });
     if (category !== undefined) update.category = category;
     if (keyword !== undefined) update.keyword = keyword;
     if (searchIntent !== undefined) update.search_intent = searchIntent;

@@ -4,17 +4,21 @@ import React, { useState } from "react";
 import { FileText, X, Printer, Building } from "lucide-react";
 import { useModalBehavior } from "@/lib/useModalBehavior";
 
+import { formatMeasuredScore } from "@/lib/measurement-display";
+
 interface WhiteLabelReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetBrand: string;
   targetDomain: string;
   competitors: string[];
-  atsScore: number;
+  atsScore: number | null;
+  comparisons?: Record<string, { selfScore: number; competitorScore: number; sampleCount: number }>;
+  observationScopeLabel?: string;
   atsBreakdown?: {
-    directMentionScore: number;
-    citationDomainScore: number;
-    fanoutCoverageScore: number;
+    directMentionScore: number | null;
+    citationDomainScore: number | null;
+    fanoutCoverageScore: number | null;
   } | null;
   competitorScores?: Record<string, number>;
   dynamicAdvice?: {
@@ -31,6 +35,8 @@ export function WhiteLabelReportModal({
   competitors,
   atsScore,
   atsBreakdown,
+  comparisons,
+  observationScopeLabel = "観測面・採点版未確認",
   competitorScores,
   dynamicAdvice,
 }: WhiteLabelReportModalProps) {
@@ -104,6 +110,7 @@ export function WhiteLabelReportModal({
             </div>
             <div className="text-right text-xs text-slate-500">
               <div>作成日: {createdAtLabel}</div>
+              <p>{observationScopeLabel}</p>
               <div className="font-bold text-slate-800">対象: {targetBrand} 様</div>
             </div>
           </div>
@@ -117,12 +124,16 @@ export function WhiteLabelReportModal({
 
             <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
               <div className="text-indigo-700 font-bold">自社 AI-Trust Score (ATS)</div>
-              <div className="text-xl font-black text-indigo-700 mt-0.5">{atsScore} / 100 pt</div>
+              <div className="text-xl font-black text-indigo-700 mt-0.5">
+                {formatMeasuredScore(atsScore, " / 100 pt")}
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
               <div className="text-slate-500 font-bold">ベンチマーク競合社数</div>
-              <div className="font-black text-slate-900 mt-1">{competitors.length > 0 ? `${competitors.length} 社` : '3 社'}</div>
+              <div className="font-black text-slate-900 mt-1">
+                {competitors.length > 0 ? `${competitors.length} 社` : "未登録 (0社)"}
+              </div>
             </div>
           </div>
 
@@ -144,30 +155,46 @@ export function WhiteLabelReportModal({
               <tbody className="divide-y divide-slate-200">
                 <tr className="bg-indigo-50/80 font-bold text-slate-900">
                   <td className="p-2.5">{targetBrand} (自社)</td>
-                  <td className="p-2.5 text-center text-indigo-700 font-black">{atsScore} pt</td>
-                  <td className="p-2.5 text-center">{atsBreakdown?.directMentionScore ?? (atsScore > 0 ? Math.round(atsScore * 0.4) : 0)} pt</td>
-                  <td className="p-2.5 text-center">{atsBreakdown?.citationDomainScore ?? (atsScore > 0 ? Math.round(atsScore * 0.4) : 0)} pt</td>
-                  <td className="p-2.5 text-center">{atsBreakdown?.fanoutCoverageScore ?? (atsScore > 0 ? Math.round(atsScore * 0.2) : 0)} pt</td>
+                  <td className="p-2.5 text-center text-indigo-700 font-black">
+                    {formatMeasuredScore(atsScore)}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    {formatMeasuredScore(atsBreakdown?.directMentionScore)}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    {formatMeasuredScore(atsBreakdown?.citationDomainScore)}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    {formatMeasuredScore(atsBreakdown?.fanoutCoverageScore)}
+                  </td>
                 </tr>
-                {competitors.map((comp, idx) => {
-                  const compScore = competitorScores?.[comp] ?? (atsScore > 0 ? Math.max(10, Math.round(atsScore * (0.85 + (idx % 3) * 0.1))) : 0);
-                  const compDirect = Math.round(compScore * 0.45);
-                  const compCitation = Math.round(compScore * 0.35);
-                  const compFanout = Math.max(0, compScore - compDirect - compCitation);
-                  return (
-                    <tr key={`${comp}-${idx}`} className="text-slate-700">
-                      <td className="p-2.5 font-medium">{comp}</td>
-                      <td className="p-2.5 text-center font-bold text-emerald-600">{compScore} pt</td>
-                      <td className="p-2.5 text-center text-slate-500">{compDirect} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
-                      <td className="p-2.5 text-center text-slate-500">{compCitation} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
-                      <td className="p-2.5 text-center text-slate-500">{compFanout} pt <span className="text-[9px] text-slate-400 font-normal">(推定)</span></td>
-                    </tr>
-                  );
-                })}
+                {competitors.length > 0 ? (
+                  competitors.map((comp, idx) => {
+                    const compScore = competitorScores?.[comp];
+                    return (
+                      <tr key={`${comp}-${idx}`} className="text-slate-700">
+                        <td className="p-2.5 font-medium">{comp}</td>
+                        <td className="p-2.5 text-center font-bold text-emerald-600">
+                          {formatMeasuredScore(compScore)}
+                          {comparisons?.[comp] && <p>共通対象 {comparisons[comp].sampleCount}件 / 自社 {comparisons[comp].selfScore} pt</p>}
+                        </td>
+                        <td className="p-2.5 text-center text-slate-400">未計測</td>
+                        <td className="p-2.5 text-center text-slate-400">未計測</td>
+                        <td className="p-2.5 text-center text-slate-400">未計測</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="text-slate-500">
+                    <td colSpan={5} className="p-4 text-center text-xs">
+                      ベンチマーク競合ブランドは未登録です。プロジェクト設定より競合を追加してください。
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
             <div className="text-[10px] text-slate-400 text-right mt-1.5">
-              ※ 自社行の内訳は実測値です。競合行の内訳は総合ATSスコアに基づく推定値です。
+              ※ 実測データが存在しない項目は「未計測」と表示しています。推測や固定比率による補完値は含みません。
             </div>
           </div>
 
@@ -182,7 +209,7 @@ export function WhiteLabelReportModal({
               </div>
               <p className="text-[11px] text-amber-900/90 leading-relaxed">
                 {dynamicAdvice?.diagnosis_summary ??
-                  "AI回答の根拠として業界専門メディア・比較サイトが参照されています。自社ドメインの未掲載分を解消するため、掲載申請および概要テキストの「35-65文字直答化」を実行いたします。"}
+                  "診断に必要な観測が不足しています。参照元と計測条件を確認してください。"}
               </p>
               {dynamicAdvice?.recommended_actions && dynamicAdvice.recommended_actions.length > 0 && (
                 <div className="mt-2.5 space-y-1.5 pt-2 border-t border-amber-200/70">

@@ -7,9 +7,9 @@ export interface CompetitorATSData {
   brandName: string;
   isTarget: boolean;
   atsScore: number;
-  directScore: number;
-  citationScore: number;
-  fanoutScore: number;
+  directScore: number | null;
+  citationScore: number | null;
+  fanoutScore: number | null;
 }
 
 interface ATSBenchmarkCardProps {
@@ -112,13 +112,13 @@ export function ATSBenchmarkCard({
                     </span>
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-600 font-semibold">
-                    {item.directScore} pt
+                    {item.directScore == null ? "未計測" : `${item.directScore} pt`}
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-600 font-semibold">
-                    {item.citationScore} pt
+                    {item.citationScore == null ? "未計測" : `${item.citationScore} pt`}
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-600 font-semibold">
-                    {item.fanoutScore} pt
+                    {item.fanoutScore == null ? "未計測" : `${item.fanoutScore} pt`}
                   </td>
                 </tr>
               );

@@ -86,6 +86,11 @@ export interface DomainCitationItem {
 
 export interface DashboardStats {
   hasScanData: boolean;
+  surface?: string; modelName?: string; locale?: string; scoreVersion?: string;
+  comparisonSelfAtsScore?: number | null; comparisonSampleCount?: number;
+  failureRate?: number | null; recordedAttemptCount?: number; unmeasuredCount?: number;
+  recentAttemptWarnings?: Array<{ promptId: string; outcome: string; measuredAt: string; lastSuccessMeasuredAt: string | null }>;
+  periodStart?: string; periodEnd?: string;
   atsScore: number | null;
   competitorTopAtsScore: number | null;
   citationRate: number | null; // 0-1
@@ -93,11 +98,12 @@ export interface DashboardStats {
   avgRank: number | null;
   domainCoverageRate: number | null; // 0-1
   trend: MonthlyLLMReport[];
+  comparisons?: Record<string, { selfScore: number; competitorScore: number; sampleCount: number }>;
   competitorScores?: Record<string, number>;
   atsBreakdown?: {
-    directMentionScore: number;
-    citationDomainScore: number;
-    fanoutCoverageScore: number;
+    directMentionScore: number | null;
+    citationDomainScore: number | null;
+    fanoutCoverageScore: number | null;
   } | null;
   diagnosticAdvice?: {
     cause: string;

@@ -1,241 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { requireProjectAccess } from "@/lib/require-project";
-import type { DashboardStats, MonthlyLLMReport } from "@/types/geo";
+import { aggregateObservations, type ObservationRow } from "@/lib/observation-stats";
+import { isUuid, normalizeObservationLocale, OBSERVATION_MODELS } from "@/lib/observation-contract";
 
-interface DashboardStatsWithBreakdown extends DashboardStats {
-  atsBreakdown: { directMentionScore: number; citationDomainScore: number; fanoutCoverageScore: number } | null;
+// Supabase defaults to a bounded result set: every query must page before aggregation.
+async function allRows(makeQuery: () => any): Promise<any[]> {
+  const rows: any[] = [];
+  for (let start = 0; start < 20000; start += 500) {
+    const { data, error } = await makeQuery().range(start, start + 499);
+    if (error) throw error;
+    if (!Array.isArray(data)) throw new Error("DATABASE_UNAVAILABLE");
+    rows.push(...data);
+    if (data.length < 500) return rows;
+  }
+  throw new Error("OBSERVATION_SCOPE_TOO_LARGE");
 }
-
-const EMPTY_STATS: DashboardStatsWithBreakdown = {
-  hasScanData: false,
-  atsScore: null,
-  competitorTopAtsScore: null,
-  citationRate: null,
-  vsPromptWinRate: null,
-  avgRank: null,
-  domainCoverageRate: null,
-  trend: [],
-  atsBreakdown: null,
-  diagnosticAdvice: null,
-  primarySourceType: null,
-  fanoutQueries: [],
-  fanoutDiff: null,
-};
-
-/** 日付から ISO週（月曜始まり）のラベル（週の月曜日 YYYY-MM-DD）を求める */
-function weekLabel(dateStr: string): string {
-  const d = new Date(dateStr);
-  const day = d.getUTCDay(); // 0=Sun
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = new Date(d);
-  monday.setUTCDate(d.getUTCDate() + diffToMonday);
-  return monday.toISOString().slice(0, 10);
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(EMPTY_STATS);
+    const db = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const q = req.nextUrl.searchParams;
+    const projectId = q.get("projectId") || q.get("project");
+    const modelName = q.get("model") || OBSERVATION_MODELS[0];
+    let locale;
+    try { locale = normalizeObservationLocale(q.get("locale") || "ja-JP"); } catch { return NextResponse.json({ error: "Invalid locale" }, { status: 400 }); }
+    if (!isUuid(projectId) || (q.get("surface") && q.get("surface") !== "gemini_api") || (q.get("scoreVersion") && q.get("scoreVersion") !== "v2") || !(OBSERVATION_MODELS as readonly string[]).includes(modelName))
+      return NextResponse.json({ error: "Invalid observation scope" }, { status: 400 });
+    const { data: org, error: orgError } = await db.from("organizations").select("id").eq("user_id", user.id).maybeSingle();
+    if (orgError) throw orgError;
+    if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 403 });
+    const { data: project, error: projectError } = await db.from("projects").select("id").eq("organization_id", org.id).eq("id", projectId).maybeSingle();
+    if (projectError) throw projectError;
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    const prompts = await allRows(() => db.from("tracked_prompts").select("id").eq("project_id", projectId).order("id"));
+    const end = new Date(), start = new Date(end); start.setUTCDate(start.getUTCDate() - 30);
+    const scope = { promptIds: prompts.map(p => p.id), surface: "gemini_api", modelName, locale, periodStart: start.toISOString(), periodEnd: end.toISOString() };
+    const rows: ObservationRow[] = [];
+    // Bound the URL length of PostgREST's IN filter while preserving the complete population.
+    for (let index = 0; index < scope.promptIds.length; index += 100) {
+      rows.push(...await allRows(() => db.from("prompt_analysis_logs")
+        .select("id,prompt_id,surface,model_name,score_version,locale,outcome,error_code,target_ats_score,competitor_ats_scores,rank,aio_status,measured_at,direct_mention_score,citation_domain_score,fanout_coverage_score,diagnostic_advice,primary_source_type,fanout_queries,brand_cited")
+        .in("prompt_id", scope.promptIds.slice(index, index + 100)).eq("surface", scope.surface).eq("model_name", scope.modelName).eq("score_version", "v2").eq("locale", scope.locale)
+        .lt("measured_at", scope.periodEnd).order("measured_at", { ascending: false }).order("id", { ascending: false })));
     }
-
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
-
-    if (!org) return NextResponse.json(EMPTY_STATS);
-
-    const reqProjectId = req.nextUrl.searchParams.get("projectId") || req.nextUrl.searchParams.get("project");
-    let targetProjectId = reqProjectId;
-
-    if (targetProjectId) {
-      const validProject = await requireProjectAccess(supabase, org.id, targetProjectId);
-      if (!validProject) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 });
-      }
-    } else {
-      const { data: firstProject } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("organization_id", org.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
-
-      if (!firstProject) return NextResponse.json(EMPTY_STATS);
-      targetProjectId = firstProject.id;
-    }
-
-    const { data: prompts } = await supabase
-      .from("tracked_prompts")
-      .select("id")
-      .eq("project_id", targetProjectId);
-
-    if (!prompts || prompts.length === 0) return NextResponse.json(EMPTY_STATS);
-    const promptIds = prompts.map((p) => p.id);
-
-    const { data: logs } = await supabase
-      .from("prompt_analysis_logs")
-      .select(
-        "prompt_id, engine, brand_cited, competitor_mentions, target_ats_score, competitor_ats_scores, rank, aio_status, win_loss, scanned_at, direct_mention_score, citation_domain_score, fanout_coverage_score, diagnostic_advice, primary_source_type, fanout_queries"
-      )
-      .in("prompt_id", promptIds)
-      .order("scanned_at", { ascending: true });
-
-    if (!logs || logs.length === 0) return NextResponse.json(EMPTY_STATS);
-
-    // ATSスコア（直近最大20件の平均。null/未算出は除外）
-    const recentAts = logs
-      .slice(-20)
-      .map((l) => l.target_ats_score)
-      .filter((v): v is number => typeof v === "number" && v > 0);
-    const atsScore = recentAts.length > 0
-      ? Math.round(recentAts.reduce((a, b) => a + b, 0) / recentAts.length)
-      : null;
-
-    const avg = (vals: (number | null | undefined)[]): number => {
-      const nums = vals.filter((v): v is number => typeof v === "number");
-      return nums.length > 0 ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 0;
-    };
-    const recentLogsForBreakdown = logs.slice(-20);
-    const atsBreakdown = recentAts.length > 0
-      ? {
-          directMentionScore: avg(recentLogsForBreakdown.map((l) => l.direct_mention_score)),
-          citationDomainScore: avg(recentLogsForBreakdown.map((l) => l.citation_domain_score)),
-          fanoutCoverageScore: avg(recentLogsForBreakdown.map((l) => l.fanout_coverage_score)),
-        }
-      : null;
-
-    let competitorTopAtsScore: number | null = null;
-    logs.slice(-20).forEach((l) => {
-      const map = (l.competitor_ats_scores || {}) as Record<string, number>;
-      Object.values(map).forEach((v) => {
-        if (typeof v === "number" && (competitorTopAtsScore === null || v > competitorTopAtsScore)) {
-          competitorTopAtsScore = v;
-        }
-      });
-    });
-
-    const citationRate = logs.filter((l) => l.brand_cited).length / logs.length;
-
-    const decisiveLogs = logs.filter((l) => l.win_loss === "win" || l.win_loss === "loss" || l.win_loss === "draw");
-    const vsPromptWinRate = decisiveLogs.length > 0
-      ? decisiveLogs.filter((l) => l.win_loss === "win").length / decisiveLogs.length
-      : null;
-
-    const rankedLogs = logs.filter((l): l is typeof l & { rank: number } => typeof l.rank === "number" && l.rank > 0);
-    const avgRank = rankedLogs.length > 0
-      ? Math.round((rankedLogs.reduce((a, b) => a + b.rank, 0) / rankedLogs.length) * 10) / 10
-      : null;
-
-    const promptIdsWithCitation = new Set(logs.filter((l) => l.brand_cited).map((l) => l.prompt_id));
-    const promptIdsScanned = new Set(logs.map((l) => l.prompt_id));
-    const domainCoverageRate = promptIdsScanned.size > 0
-      ? promptIdsWithCitation.size / promptIdsScanned.size
-      : null;
-
-    // 週次トレンド集計
-    const weekMap = new Map<string, { gemini: boolean[]; chatgpt: boolean[]; competitor: boolean[] }>();
-    logs.forEach((l) => {
-      const wk = weekLabel(l.scanned_at);
-      if (!weekMap.has(wk)) weekMap.set(wk, { gemini: [], chatgpt: [], competitor: [] });
-      const bucket = weekMap.get(wk)!;
-      const recommended = l.aio_status === "shown_recommended";
-      if (l.engine === "chatgpt") bucket.chatgpt.push(recommended);
-      else bucket.gemini.push(recommended);
-
-      const compMentions = Object.values((l.competitor_mentions || {}) as Record<string, boolean>);
-      compMentions.forEach((m) => bucket.competitor.push(!!m));
-    });
-
-    const rate = (arr: boolean[]): number | null =>
-      arr.length > 0 ? arr.filter(Boolean).length / arr.length : null;
-
-    const trend: MonthlyLLMReport[] = Array.from(weekMap.entries())
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([wk, bucket]) => ({
-        periodLabel: wk,
-        periodStart: wk,
-        geminiRecommendRate: rate(bucket.gemini),
-        chatgptRecommendRate: rate(bucket.chatgpt),
-        competitorAvgRecommendRate: rate(bucket.competitor),
-        promptTotalCount: bucket.gemini.length + bucket.chatgpt.length,
-        avgRank: null,
-        domainCoverageRate: null,
-        vsPromptWinRate: null,
-      }));
-
-    const competitorScoreSums: Record<string, { sum: number; count: number }> = {};
-    logs.slice(-20).forEach((l) => {
-      const map = (l.competitor_ats_scores || {}) as Record<string, number>;
-      Object.entries(map).forEach(([comp, score]) => {
-        if (typeof score === "number" && score > 0) {
-          if (!competitorScoreSums[comp]) competitorScoreSums[comp] = { sum: 0, count: 0 };
-          competitorScoreSums[comp].sum += score;
-          competitorScoreSums[comp].count += 1;
-        }
-      });
-    });
-    const competitorScores: Record<string, number> = {};
-    Object.entries(competitorScoreSums).forEach(([comp, { sum, count }]) => {
-      competitorScores[comp] = Math.round(sum / count);
-    });
-
-    // 最新スキャンログから改善アドバイスとファンアウトクエリを取得
-    const latestLogWithAdvice = [...logs].reverse().find((l) => l.diagnostic_advice && Object.keys(l.diagnostic_advice).length > 0) || logs[logs.length - 1];
-    const diagnosticAdvice = latestLogWithAdvice?.diagnostic_advice || null;
-    const primarySourceType = latestLogWithAdvice?.primary_source_type || null;
-    const fanoutQueries = latestLogWithAdvice?.fanout_queries || [];
-
-    // 時系列ファンアウト集合差分（Added / Kept / Dropped）の算出
-    const logsWithFanouts = logs.filter((l) => Array.isArray(l.fanout_queries) && l.fanout_queries.length > 0);
-    let fanoutDiff: any = null;
-
-    if (logsWithFanouts.length >= 1) {
-      const currentLog = logsWithFanouts[logsWithFanouts.length - 1];
-      const prevLog = logsWithFanouts.length >= 2 ? logsWithFanouts[logsWithFanouts.length - 2] : null;
-
-      const currentSet = new Set((currentLog.fanout_queries || []).map((q: string) => q.trim()));
-      const prevSet = new Set((prevLog?.fanout_queries || []).map((q: string) => q.trim()));
-
-      const added = Array.from(currentSet).filter((q) => !prevSet.has(q));
-      const kept = Array.from(currentSet).filter((q) => prevSet.has(q));
-      const dropped = Array.from(prevSet).filter((q) => !currentSet.has(q));
-
-      fanoutDiff = {
-        added: prevLog ? added : [],
-        kept: prevLog ? kept : Array.from(currentSet),
-        dropped: prevLog ? dropped : [],
-        previousCount: prevSet.size,
-        currentCount: currentSet.size,
-      };
-    }
-
-    const stats = {
-      hasScanData: true,
-      atsScore,
-      competitorTopAtsScore,
-      competitorScores,
-      citationRate,
-      vsPromptWinRate,
-      avgRank,
-      domainCoverageRate,
-      trend,
-      atsBreakdown,
-      diagnosticAdvice,
-      primarySourceType,
-      fanoutQueries,
-      fanoutDiff,
-    };
-
-    return NextResponse.json(stats);
+    return NextResponse.json(aggregateObservations(rows, scope));
   } catch (error: any) {
-    console.error("Stats API Error:", error);
-    return NextResponse.json(EMPTY_STATS);
+    const schemaPending = ["42703", "PGRST204"].includes(error?.code) && /surface|model_name|score_version|locale|outcome|measured_at/.test(error?.message || "");
+    return NextResponse.json({ error: schemaPending ? "観測データの更新準備中です。" : "観測データを取得できませんでした。", code: schemaPending ? "OBSERVATION_SCHEMA_PENDING" : "STATS_UNAVAILABLE" }, { status: 503 });
   }
 }

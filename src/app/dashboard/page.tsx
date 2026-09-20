@@ -51,6 +51,11 @@ const DEFAULT_BRAND_NAME: Record<string, string> = {
 import { useProject } from "@/context/ProjectContext";
 
 export default function DashboardPage() {
+  const { projectId, ownerId } = useProject();
+  const { lang } = useLanguage();
+  return <DashboardInner key={JSON.stringify([ownerId, projectId, lang])} />;
+}
+function DashboardInner() {
   const { lang, t } = useLanguage();
   const router = useRouter();
   const { projectId, currentProject } = useProject();
@@ -60,6 +65,7 @@ export default function DashboardPage() {
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [credits, setCredits] = useState({ plan: "Starter", total: 10, used: 0, remaining: 10 });
   const [loading, setLoading] = useState(true);
+  const [model, setModel] = useState("gemini-3.6-flash");
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
 
   // モーダルのState管理
@@ -112,21 +118,19 @@ export default function DashboardPage() {
   // プロジェクトIDに応じた実測スキャンデータの集計取得（プロジェクト切替時に自動再フェッチ）
   useEffect(() => {
     let cancelled = false;
-    const statsUrl = projectId ? `/api/user/stats?projectId=${projectId}` : "/api/user/stats";
-
-    fetch(statsUrl)
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data && !data.error) setStats(data as DashboardStats);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("Failed to fetch stats:", err);
-      });
-
-    return () => { cancelled = true; };
-  }, [projectId]);
+    setStats(EMPTY_STATS);
+    setFetchError(null);
+    if (!projectId) return;
+    const controller = new AbortController();
+    const statsUrl = '/api/user/stats?' + new URLSearchParams({ projectId, model, locale: lang }).toString();
+    fetch(statsUrl, { signal: controller.signal }).then(async res => {
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '観測データを取得できませんでした。');
+      return data;
+    }).then(data => { if (!cancelled) setStats(data); })
+      .catch(err => { if (!cancelled) setFetchError(err.message); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [projectId, model, lang]);
 
   // ブランド名が未設定の間だけ、言語に応じたプレースホルダーを表示する（再フェッチはしない）
   const displayBrandName = brandName === "自社ブランド" ? (DEFAULT_BRAND_NAME[lang] ?? DEFAULT_BRAND_NAME.ja) : brandName;
@@ -151,7 +155,7 @@ export default function DashboardPage() {
   };
 
   const handleInvestigateFanout = (query: string) => {
-    setToast(`サブクエリ「${query}」の競合比較分析を実行しました（1クレジット消費）`);
+    setToast(`サブクエリ「${query}」はプロンプト画面に登録して調査してください。`);
     setTimeout(() => setToast(null), 3500);
   };
 
@@ -198,11 +202,17 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="text-xs space-y-2">
+        <label>観測面: Gemini API / 採点 v2 / {lang} / モデル <select aria-label="観測モデル" value={model} onChange={e => { setStats(EMPTY_STATS); setIsReportModalOpen(false); setOutreachAction(null); setModel(e.target.value); }}><option>gemini-3.6-flash</option><option>gemini-2.0-flash</option></select></label>
+        <p>総合ATSは必要な構成指標が揃った場合のみ算出。現在の単発スキャンではファンアウト網羅率は未計測です。</p>
+        <p>競合比較の共通対象: {stats.comparisonSampleCount ?? 0}件。記録済み試行の失敗率（直近30日）: {formatPct(stats.failureRate ?? null)} / 未計測試行 {stats.unmeasuredCount ?? 0}件</p>
+        {stats.recentAttemptWarnings?.map(w => <p role="alert" key={w.promptId}>プロンプト {w.promptId}: 直近試行 {w.measuredAt} は{w.outcome === 'failure' ? '失敗' : '未計測'}。{w.lastSuccessMeasuredAt ? '前回成功時の値を表示（' + w.lastSuccessMeasuredAt + '）' : '成功観測なし・未計測'}</p>)}
+      </div>
       {/* Error Alert Banner */}
       {fetchError && (
-        <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
+        <div role="alert" className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-          <span>{fetchError}設定画面より情報を再設定してください。</span>
+          <span>{fetchError}</span>
         </div>
       )}
 
@@ -230,7 +240,7 @@ export default function DashboardPage() {
       )}
 
       {/* 未計測（プロンプト未登録・スキャン未実行）誘導バナー: ATS等がゼロ埋め表示になる不具合の代替 */}
-      {!loading && !stats.hasScanData && (
+      {!loading && !fetchError && !stats.hasScanData && (
         <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="flex items-start gap-3">
             <span className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0">
@@ -241,7 +251,7 @@ export default function DashboardPage() {
                 まだ計測データがありません（下の指標はすべて「ー」）
               </h3>
               <p className="text-xs text-amber-800 leading-relaxed max-w-xl">
-                ATS・被引用率・推奨順位などは、対策プロンプトを登録して最初のスキャンを実行すると自動算出されます。まずは1件登録してみましょう。
+                プロンプトを登録すると言及・引用を観測できます。必要な指標が揃わない総合ATSは未計測と表示します。
               </p>
             </div>
           </div>
@@ -268,8 +278,8 @@ export default function DashboardPage() {
             {stats.atsScore === null ? "ー" : stats.atsScore} <span className="text-sm font-normal text-slate-400">/ 100 pt</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            {stats.atsScore !== null && stats.competitorTopAtsScore !== null
-              ? `競合最高(${stats.competitorTopAtsScore}pt)とのギャップ: ${stats.atsScore - stats.competitorTopAtsScore >= 0 ? "+" : ""}${stats.atsScore - stats.competitorTopAtsScore}pt`
+            {stats.comparisonSelfAtsScore != null && stats.competitorTopAtsScore !== null
+              ? `競合最高(${stats.competitorTopAtsScore}pt)とのギャップ: ${stats.comparisonSelfAtsScore! - stats.competitorTopAtsScore >= 0 ? "+" : ""}${stats.comparisonSelfAtsScore! - stats.competitorTopAtsScore}pt`
               : "プロンプトスキャン後に自動算出"}
           </p>
         </div>
@@ -285,7 +295,7 @@ export default function DashboardPage() {
             {formatPct(stats.citationRate)}
           </div>
           <p className="text-[11px] text-slate-400">
-            {stats.citationRate !== null ? "Google AIO ソースリンクへの掲載率" : t.dash_kpi_citations_desc}
+            {stats.citationRate !== null ? "Gemini APIの参照元への公式ドメイン掲載率" : t.dash_kpi_citations_desc}
           </p>
         </div>
 
@@ -311,7 +321,7 @@ export default function DashboardPage() {
             {formatPct(stats.vsPromptWinRate)}
           </div>
           <p className="text-[11px] text-slate-400">
-            同一プロンプトで自社のみ言及された割合
+            比較可能な共通観測で競合最高ATSを上回った割合
           </p>
         </div>
 
@@ -356,13 +366,13 @@ export default function DashboardPage() {
                     {
                       brandName: displayBrandName,
                       isTarget: true,
-                      atsScore: stats.atsScore,
-                      directScore: stats.atsBreakdown.directMentionScore,
-                      citationScore: stats.atsBreakdown.citationDomainScore,
-                      fanoutScore: stats.atsBreakdown.fanoutCoverageScore,
+                      atsScore: stats.comparisonSelfAtsScore ?? stats.atsScore,
+                      directScore: stats.competitorTopAtsScore == null ? stats.atsBreakdown.directMentionScore : null,
+                      citationScore: stats.competitorTopAtsScore == null ? stats.atsBreakdown.citationDomainScore : null,
+                      fanoutScore: stats.competitorTopAtsScore == null ? stats.atsBreakdown.fanoutCoverageScore : null,
                     },
                     ...(stats.competitorTopAtsScore !== null
-                      ? [{ brandName: topCompetitorName, isTarget: false, atsScore: stats.competitorTopAtsScore, directScore: 0, citationScore: 0, fanoutScore: 0 }]
+                      ? [{ brandName: topCompetitorName, isTarget: false, atsScore: stats.competitorTopAtsScore, directScore: null, citationScore: null, fanoutScore: null }]
                       : []),
                   ]
                 : []
@@ -408,15 +418,7 @@ export default function DashboardPage() {
 
       {/* Fan-out Exploration Card（実測ファンアウトクエリ群 ＆ 時系列差分にバインド） */}
       <FanoutExplorerCard
-        fanoutQueries={
-          stats.hasScanData && stats.fanoutQueries && stats.fanoutQueries.length > 0
-            ? stats.fanoutQueries
-            : [
-                `${displayBrandName} 費用相場`,
-                `${displayBrandName} 導入 メリット`,
-                `${displayBrandName} 評判 比較`
-              ]
-        }
+        fanoutQueries={stats.fanoutQueries ?? []}
         coveredQueries={[]}
         fanoutDiff={stats.fanoutDiff}
         parentPrompt={displayBrandName}
@@ -465,9 +467,11 @@ export default function DashboardPage() {
         targetBrand={displayBrandName}
         targetDomain={domain}
         competitors={competitors}
-        atsScore={stats.atsScore ?? 0}
+        observationScopeLabel={`Gemini API / v2 / ${model} / ${lang}`}
+        atsScore={stats.atsScore}
         atsBreakdown={stats.atsBreakdown}
         competitorScores={stats.competitorScores}
+        comparisons={stats.comparisons}
         dynamicAdvice={dynamicAdvice}
       />
 

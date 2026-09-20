@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import {
@@ -58,6 +58,8 @@ const IMPORTANCE_STYLE: Record<PromptImportance, string> = {
 };
 
 function PromptsContent() {
+  const mounted = useRef(true);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -90,21 +92,22 @@ function PromptsContent() {
   }, [currentProject]);
 
   // 過去スキャン履歴の取得
+  const historyGeneration = useRef(0);
   const fetchHistoryLogs = () => {
-    const url = projectId ? `/api/user/logs?projectId=${projectId}` : "/api/user/logs";
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.logs) setHistoryLogs(data.logs);
-        else setHistoryLogs([]);
-      })
-      .catch(() => {});
+    const generation = ++historyGeneration.current;
+    setHistoryLogs([]);
+    if (!projectId) return;
+    fetch('/api/user/logs?' + new URLSearchParams({ projectId, locale: targetLocale }).toString())
+      .then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || '履歴を取得できませんでした。'); return data; })
+      .then(data => { if (mounted.current && generation === historyGeneration.current) setHistoryLogs(data.logs || []); })
+      .catch(err => { if (mounted.current && generation === historyGeneration.current) setError(err.message); });
   };
 
   // 履歴からの結果復元
   const handleRestoreLog = (log: any) => {
     setPrompt(log.prompt);
     setResult({
+      surface: log.surface, modelName: log.modelName, scoreVersion: log.scoreVersion, locale: log.locale, outcome: log.outcome,
       prompt: log.prompt,
       brandName: brandName,
       brandMentioned: log.brandMentioned,
@@ -113,7 +116,7 @@ function PromptsContent() {
       fanoutQueries: log.fanoutQueries || [],
       citationSources: log.citationSources || [],
       competitorMentions: {},
-      creditsRemaining: 10,
+
       rank: log.rank || null,
     });
     // スクロール移動
@@ -152,7 +155,7 @@ function PromptsContent() {
   useEffect(() => {
     fetchHistoryLogs();
     fetchRegisteredPrompts();
-  }, [projectId]);
+  }, [projectId, targetLocale]);
 
   const promptCategories = ["すべて", ...Array.from(new Set(registeredPrompts.map((p) => p.category)))];
   const filteredPrompts = categoryFilter === "すべて"
@@ -305,6 +308,7 @@ function PromptsContent() {
       });
 
       const data = await res.json();
+      if (!mounted.current) return;
       if (!res.ok) {
         if (res.status === 401) {
           router.push(`/login?redirect=prompts&prompt=${encodeURIComponent(targetPrompt)}`);
@@ -313,7 +317,8 @@ function PromptsContent() {
         throw new Error(data.error || "解析に失敗しました。");
       }
 
-      setResult(data);
+      if (data.outcome === "unmeasured") { setError("回答を取得できず未計測です。非言及・0点という結果ではありません。"); setResult(null); }
+      else setResult(data);
       fetchHistoryLogs();
       fetchRegisteredPrompts();
     } catch (err: any) {
@@ -696,6 +701,7 @@ function PromptsContent() {
       {/* Analysis Result Display */}
       {result && (
         <div className="space-y-6">
+          <p className="text-xs text-slate-500 print:hidden">{result.surface === "gemini_api" ? `Gemini API / ${result.scoreVersion} / ${result.modelName} / ${result.locale}` : "観測面未確認"}</p>
           {/* Printable Header (印刷・PDF出力時のみ紙面トップに表示) */}
           <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
             <div className="flex justify-between items-end">
@@ -708,6 +714,7 @@ function PromptsContent() {
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-700">
+              <p>{result.surface === "gemini_api" ? `Gemini API / ${result.scoreVersion} / ${result.modelName} / ${result.locale}` : "観測面未確認"} / {result.outcome === "unmeasured" ? "未計測" : "保存済み観測"}</p>
               <div><strong>調査プロンプト:</strong> {result.prompt}</div>
               <div><strong>対象ブランド:</strong> {result.brandName}</div>
             </div>
@@ -1004,9 +1011,10 @@ function PromptsContent() {
 }
 
 export default function PromptsPage() {
+  const { projectId, ownerId } = useProject();
   return (
     <Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">読み込み中...</div>}>
-      <PromptsContent />
+      <PromptsContent key={JSON.stringify([ownerId, projectId])} />
     </Suspense>
   );
 }

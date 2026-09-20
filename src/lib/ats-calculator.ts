@@ -8,7 +8,8 @@ export type PrimarySourceType =
   | 'news_and_pr'
   | 'specialized_and_comparison'
   | 'public_and_academic'
-  | 'user_community';
+  | 'user_community'
+  | 'unknown';
 
 export type ActionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -22,7 +23,7 @@ export interface RecommendedAction {
 export interface DiagnosticAdvice {
   primary_source_type: PrimarySourceType;
   top_influential_media: string[];
-  gap_pattern: 'source_exposure_lack' | 'structure_extraction_failure' | 'fanout_gap' | 'leading';
+  gap_pattern: 'source_exposure_lack' | 'structure_extraction_failure' | 'fanout_gap' | 'leading' | 'insufficient_data';
   diagnosis_summary: string;
   recommended_actions: RecommendedAction[];
 }
@@ -45,6 +46,8 @@ export interface ATSInput {
   targetBrand: string;
   targetDomain: string;
   competitors: string[]; // ['CompA', 'CompB']
+  /** 競合の公式ドメインマップ（登録されている場合、対称採点として公式ドメイン引用を同等に判定） */
+  competitorDomains?: Record<string, string>;
   aiResponseText: string;
   brandMentions: BrandMention[]; // 自社＋競合の言及ランク
   citations: CitationSource[];
@@ -54,13 +57,13 @@ export interface ATSInput {
 
 export interface ATSResult {
   targetBrand: string;
-  targetATS: number;
+  targetATS: number | null;
   targetBreakdown: {
-    directMentionScore: number; // 0-40
-    citationDomainScore: number; // 0-40
-    fanoutCoverageScore: number; // 0-20
+    directMentionScore: number | null; // 0-40
+    citationDomainScore: number | null; // 0-40
+    fanoutCoverageScore: number | null; // 0-20
   };
-  competitorATSMap: Record<string, number>;
+  competitorATSMap: Record<string, number | null>;
   diagnosticAdvice: DiagnosticAdvice;
 }
 
@@ -77,6 +80,7 @@ function normalizeBrandName(name: string | undefined | null): string {
  * rank=0 でも比較対象として文中に言及されていれば5pt（設計書 §1.2 「比較・言及のみ」）
  */
 export function calculateDirectMentionScore(rank: number, mentionedInText: boolean = false): number {
+  if (!Number.isInteger(rank) || rank < 0) return mentionedInText ? 5 : 0;
   if (rank === 1) return 40;
   if (rank >= 2 && rank <= 3) return 28;
   if (rank >= 4) return 15;
@@ -85,67 +89,48 @@ export function calculateDirectMentionScore(rank: number, mentionedInText: boole
 }
 
 /**
- * 一次ソース影響度スコア (0〜40) を計算
- * 引用ソースは自社・競合で共有される1本のリストのため、必ず対象ブランドが
- * 実際にそのソースに掲載/言及されているかを確認してからスコアリングする
- * （確認できない場合、ブランド不問で一律加点してしまう不具合を防ぐ）。
+ * ドメイン文字列からホスト名部分を正規化して抽出する
  */
-export function calculateCitationDomainScore(
-  brandName: string,
-  targetDomain: string,
-  citations: CitationSource[],
-  isTarget: boolean
-): number {
-  if (!citations || citations.length === 0) return 0;
-
-  // ①自社の公式ドメインが引用元URLに直接含まれているか（自社のみ判定可能）
-  if (isTarget && targetDomain) {
-    const cleanTargetDomain = targetDomain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
-    const hasDirectCitation = cleanTargetDomain.length > 0 &&
-      citations.some(c => (c.domain || '').toLowerCase().includes(cleanTargetDomain));
-    if (hasDirectCitation) return 40;
-  }
-
-  // ②対象ブランドが第三者ソースに掲載/言及されているかを確認
-  const normalizedBrand = normalizeBrandName(brandName);
-  const relevantCitations = citations.filter(c => {
-    if (c.mentionedBrands && c.mentionedBrands.length > 0) {
-      return c.mentionedBrands.some(b => normalizeBrandName(b) === normalizedBrand);
-    }
-    // mentionedBrands が未提供の場合のみ、タイトル/URLへの簡易テキストマッチにフォールバック
-    if (!normalizedBrand) return false;
-    return (c.title || '').toLowerCase().includes(normalizedBrand) ||
-      (c.url || '').toLowerCase().includes(normalizedBrand);
-  });
-
-  if (relevantCitations.length === 0) return 0; // サードパーティ未掲載
-
-  // 高権威メディア/比較サイト/ニュースドメインキーワード
-  const highAuthorityDomains = ['it-trend', 'boxil', 'prtimes', 'note.com', 'nikkei', 'itmedia', 'qiita', 'zenn'];
-  const isHighAuthCited = relevantCitations.some(c =>
-    highAuthorityDomains.some(d => (c.domain || '').toLowerCase().includes(d))
-  );
-
-  return isHighAuthCited ? 30 : 15;
+export function normalizeHost(value: string | undefined | null): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const u = new URL(value.includes('://') ? value.trim() : 'https://' + value.trim());
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return '';
+    const host = u.hostname.toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
+    if (!host.includes('.') || !/^[a-z0-9.-]+$/.test(host) || host.split('.').some(p => !p || p.startsWith('-') || p.endsWith('-'))) return '';
+    return host;
+  } catch { return ''; }
 }
-
-/**
- * ファンアウトカバー率スコア (0〜20) を計算
- */
-export function calculateFanoutCoverageScore(
-  coveredCount: number,
-  totalFanouts: number
-): number {
-  if (totalFanouts === 0) return 10;
-  const ratio = Math.min(1, Math.max(0, coveredCount / totalFanouts));
-  return Math.round(ratio * 20);
+export function matchesOfficialHost(source: string | undefined | null, official: string | undefined | null): boolean {
+  const a = normalizeHost(source), b = normalizeHost(official);
+  return !!a && !!b && (a === b || a.endsWith('.' + b));
+}
+export function citationHost(c: CitationSource): string {
+  // A supplied URL is authoritative; a forged domain field cannot override it.
+  return normalizeHost(c.url || c.domain);
+}
+export function calculateCitationDomainScore(brandName: string, officialDomain: string | undefined | null, citations: CitationSource[], _legacy?: boolean): number | null {
+  const official = normalizeHost(officialDomain);
+  if (!official) return null;
+  const sources = (Array.isArray(citations) ? citations : []).filter(c => c && citationHost(c));
+  if (sources.some(c => matchesOfficialHost(citationHost(c), official))) return 40;
+  const brand = normalizeBrandName(brandName);
+  // Source-level brand attribution must be supplied as evidence, not guessed from a URL substring.
+  const relevant = sources.filter(c => brand && Array.isArray(c.mentionedBrands) && c.mentionedBrands.some(b => normalizeBrandName(b) === brand));
+  if (!relevant.length) return 0;
+  const media = ['it-trend.jp', 'boxil.jp', 'prtimes.jp', 'note.com', 'nikkei.com', 'itmedia.co.jp', 'qiita.com', 'zenn.dev'];
+  return relevant.some(c => media.some(host => matchesOfficialHost(citationHost(c), host))) ? 30 : 15;
+}
+export function calculateFanoutCoverageScore(covered: number, total: number): number | null {
+  if (!Number.isInteger(total) || total <= 0 || !Number.isInteger(covered) || covered < 0 || covered > total) return null;
+  return Math.round(covered / total * 20);
 }
 
 /**
  * 引用URL群から一次ソース種別を自動判別
  */
 export function classifyPrimarySourceType(citations: CitationSource[]): PrimarySourceType {
-  if (!citations || citations.length === 0) return 'official_docs';
+  if (!citations || citations.length === 0) return 'unknown';
 
   const domainStr = citations.map(c => (c.domain || '').toLowerCase() + ' ' + (c.url || '').toLowerCase()).join(' ');
 
@@ -171,79 +156,36 @@ export function classifyPrimarySourceType(citations: CitationSource[]): PrimaryS
  * 各配列/オブジェクトフィールドが欠落している可能性を考慮し、防御的にデフォルト値を適用する。
  */
 export function calculateATS(input: ATSInput): ATSResult {
-  const fanoutQueries = input.fanoutQueries ?? [];
-  const citations = input.citations ?? [];
-  const brandMentions = input.brandMentions ?? [];
-  const coveredFanoutsPerBrand = input.coveredFanoutsPerBrand ?? {};
-  const totalFanouts = fanoutQueries.length;
-
-  // competitors に自社ブランドが誤って重複登録されているケースを除外（自己比較によるゼロ和ギャップ判定を防ぐ）
-  const competitors = (input.competitors ?? []).filter(
-    c => normalizeBrandName(c) !== normalizeBrandName(input.targetBrand) && normalizeBrandName(c).length > 0
-  );
-
-  // 表記ゆれ（大文字小文字・前後空白）を吸収したファンアウトカバー数の参照用マップ
-  const normalizedFanoutMap = new Map(
-    Object.entries(coveredFanoutsPerBrand).map(([k, v]) => [normalizeBrandName(k), v])
-  );
-  const getFanoutCount = (brand: string) => normalizedFanoutMap.get(normalizeBrandName(brand)) || 0;
-
-  // 自社ブランドの各スコア計算
-  const targetMention = brandMentions.find(b => normalizeBrandName(b.brandName) === normalizeBrandName(input.targetBrand));
-  const targetRank = targetMention ? targetMention.rank : 0;
-  const targetDirectScore = calculateDirectMentionScore(targetRank, targetMention?.mentionedInText);
-  const targetCitationScore = calculateCitationDomainScore(input.targetBrand, input.targetDomain, citations, true);
-  const targetFanoutCount = getFanoutCount(input.targetBrand);
-  const targetFanoutScore = calculateFanoutCoverageScore(targetFanoutCount, totalFanouts);
-
-  const targetATS = targetDirectScore + targetCitationScore + targetFanoutScore;
-
-  // 競合ブランドのATS計算
-  const competitorATSMap: Record<string, number> = {};
-  competitors.forEach(comp => {
-    const compMention = brandMentions.find(b => normalizeBrandName(b.brandName) === normalizeBrandName(comp));
-    const compRank = compMention ? compMention.rank : 0;
-    const compDirect = calculateDirectMentionScore(compRank, compMention?.mentionedInText);
-    const compCitation = calculateCitationDomainScore(comp, '', citations, false);
-    const compFanoutCount = getFanoutCount(comp);
-    const compFanoutScore = calculateFanoutCoverageScore(compFanoutCount, totalFanouts);
-    competitorATSMap[comp] = compDirect + compCitation + compFanoutScore;
-  });
-
-  // 競合最高ATS
-  const maxCompATS = Math.max(0, ...Object.values(competitorATSMap));
-  const atsGap = targetATS - maxCompATS;
-
-  // ギャップパターンの判定
-  let gapPattern: DiagnosticAdvice['gap_pattern'] = 'leading';
-  if (atsGap < 0) {
-    if (targetCitationScore < 25) {
-      gapPattern = 'source_exposure_lack';
-    } else if (targetDirectScore < 20) {
-      gapPattern = 'structure_extraction_failure';
-    } else {
-      gapPattern = 'fanout_gap';
-    }
-  }
-
-  // 一次ソースの判定
-  const primarySourceType = classifyPrimarySourceType(citations);
-  const topMedia = citations.slice(0, 3).map(c => c.domain);
-
-  // 動的アドバイスの構築
-  const advice = buildDynamicAdvice(input.targetBrand, primarySourceType, gapPattern, topMedia, atsGap, targetATS);
-
-  return {
-    targetBrand: input.targetBrand,
-    targetATS,
-    targetBreakdown: {
-      directMentionScore: targetDirectScore,
-      citationDomainScore: targetCitationScore,
-      fanoutCoverageScore: targetFanoutScore
-    },
-    competitorATSMap,
-    diagnosticAdvice: advice
+  const citations = (input.citations || []).filter(c => c && citationHost(c));
+  const mentions = (input.brandMentions || []).filter(Boolean);
+  const queries = input.fanoutQueries || [];
+  const coverage = new Map(Object.entries(input.coveredFanoutsPerBrand || {}).map(([k,v]) => [normalizeBrandName(k),v]));
+  const domains = new Map(Object.entries(input.competitorDomains || {}).map(([k,v]) => [normalizeBrandName(k),v]));
+  const component = (brand: string, domain: string | undefined) => {
+    const mention = mentions.find(m => normalizeBrandName(m.brandName) === normalizeBrandName(brand));
+    const directMentionScore = calculateDirectMentionScore(mention?.rank || 0, mention?.mentionedInText);
+    const citationDomainScore = calculateCitationDomainScore(brand, domain, citations);
+    const count = coverage.get(normalizeBrandName(brand));
+    const fanoutCoverageScore = count === undefined ? null : calculateFanoutCoverageScore(count, queries.length);
+    return { directMentionScore, citationDomainScore, fanoutCoverageScore };
   };
+  const total = (v: ReturnType<typeof component>) => Object.values(v).every(n => n !== null) ? v.directMentionScore + v.citationDomainScore! + v.fanoutCoverageScore! : null;
+  const targetBreakdown = component(input.targetBrand, input.targetDomain);
+  const targetATS = total(targetBreakdown);
+  const competitors = [...new Set((input.competitors || []).filter(c => c && normalizeBrandName(c) !== normalizeBrandName(input.targetBrand)))];
+  const competitorATSMap = Object.fromEntries(competitors.map(c => [c, total(component(c, domains.get(normalizeBrandName(c))))]));
+  const comparable = Object.values(competitorATSMap).filter((v): v is number => v !== null);
+  const gap = targetATS !== null && comparable.length ? targetATS - Math.max(...comparable) : null;
+  const primarySourceType = classifyPrimarySourceType(citations);
+  const topMedia = citations.slice(0,3).map(citationHost);
+  let diagnosticAdvice: DiagnosticAdvice;
+  if (gap === null) diagnosticAdvice = { primary_source_type: primarySourceType, top_influential_media: topMedia,
+    gap_pattern: 'insufficient_data', diagnosis_summary: '比較に必要な観測値が不足しています。未計測の項目を確認してください。', recommended_actions: [] };
+  else {
+    const pattern = gap >= 0 ? 'leading' : targetBreakdown.citationDomainScore! < 25 ? 'source_exposure_lack' : targetBreakdown.directMentionScore < 20 ? 'structure_extraction_failure' : 'fanout_gap';
+    diagnosticAdvice = buildDynamicAdvice(input.targetBrand, primarySourceType, pattern, topMedia, gap, targetATS!);
+  }
+  return { targetBrand: input.targetBrand, targetATS, targetBreakdown, competitorATSMap, diagnosticAdvice };
 }
 
 /**

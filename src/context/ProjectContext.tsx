@@ -1,7 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, Suspense } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+
+import { createClient } from "@/lib/supabase-browser";
 
 export interface ProjectItem {
   id: string;
@@ -12,6 +14,7 @@ export interface ProjectItem {
 }
 
 interface ProjectContextType {
+  ownerId: string | null;
   projectId: string | null;
   currentProject: ProjectItem | null;
   projects: ProjectItem[];
@@ -22,6 +25,7 @@ interface ProjectContextType {
 }
 
 const ProjectContext = createContext<ProjectContextType>({
+  ownerId: null,
   projectId: null,
   currentProject: null,
   projects: [],
@@ -42,53 +46,64 @@ function ProjectProviderInner({ children }: { children: React.ReactNode }) {
 
   const urlProjectId = searchParams.get("project") || searchParams.get("projectId");
 
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const location = useRef({ pathname, search: searchParams.toString() });
+  location.current = { pathname, search: searchParams.toString() };
   const fetchProjects = async () => {
+    const generation = ++sequence.current;
+    controller.current?.abort();
+    const request = new AbortController(); controller.current = request;
+    setLoaded(false);
     try {
-      const res = await fetch("/api/user/project");
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data.projects) ? data.projects : [];
-        setProjects(list);
-        if (data.organization?.plan) {
-          setPlan(data.organization.plan.toLowerCase());
-        }
-
-        // URLにプロジェクト指定がない、または自分のプロジェクト一覧に存在しない場合、先頭プロジェクトでURLを正規化
-        const isValidUrlId = urlProjectId && list.some((p: ProjectItem) => p.id === urlProjectId);
-        if ((!urlProjectId || !isValidUrlId) && list.length > 0) {
-          const remembered = typeof window !== "undefined" ? localStorage.getItem("geo_last_project") : null;
-          const initial = list.find((p: ProjectItem) => p.id === remembered) || list[0];
-          if (initial?.id) {
-            router.replace(`${pathname}?project=${initial.id}`);
-          }
-        }
+      const res = await fetch("/api/user/project", { signal: request.signal });
+      if (!res.ok) throw new Error("Project access unavailable");
+      const data = await res.json();
+      if (generation !== sequence.current || request.signal.aborted) return;
+      const list = Array.isArray(data.projects) ? data.projects : [];
+      setProjects(list);
+      setOwnerId(typeof data.organization?.id === "string" ? data.organization.id : null);
+      setPlan(typeof data.organization?.plan === "string" ? data.organization.plan.toLowerCase() : "starter");
+      const params = new URLSearchParams(location.current.search);
+      const specified = params.get("project") || params.get("projectId");
+      // An explicitly invalid project must never silently fall back to another.
+      if (!specified && list.length) {
+        let remembered: string | null = null;
+        try { remembered = localStorage.getItem("geo_last_project"); } catch {}
+        const initial = list.find((p: ProjectItem) => p.id === remembered) || list[0];
+        params.set("project", initial.id);
+        router.replace(location.current.pathname + "?" + params.toString());
       }
-    } catch (err) {
-      console.error("Failed to fetch projects:", err);
-    } finally {
-      setLoaded(true);
-    }
+    } catch {
+      if (generation === sequence.current) { setProjects([]); setOwnerId(null); }
+    } finally { if (generation === sequence.current) setLoaded(true); }
   };
-
   useEffect(() => {
     fetchProjects();
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        ++sequence.current; controller.current?.abort(); setProjects([]); setOwnerId(null); setLoaded(true);
+      } else if (event === "SIGNED_IN" || event === "USER_UPDATED") { void fetchProjects(); }
+    });
+    return () => { ++sequence.current; controller.current?.abort(); subscription.unsubscribe(); };
   }, [pathname]);
-
-  // 有効なプロジェクトを特定（URLのIDが存在しない場合は先頭プロジェクト）
-  const validProject = projects.find((p) => p.id === urlProjectId) || projects[0] || null;
+  const validProject = loaded && ownerId ? projects.find(p => p.id === urlProjectId) || null : null;
   const projectId = validProject?.id ?? null;
   const currentProject = validProject;
-
   const setProjectId = (id: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("geo_last_project", id);
-    }
-    router.push(`${pathname}?project=${id}`);
+    if (!projects.some(p => p.id === id)) return;
+    try { localStorage.setItem("geo_last_project", id); } catch {}
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("projectId"); params.delete("prompt"); params.delete("fanouts");
+    params.set("project", id);
+    router.push(pathname + "?" + params.toString());
   };
 
   return (
     <ProjectContext.Provider
       value={{
+        ownerId,
         projectId,
         currentProject,
         projects,

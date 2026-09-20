@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { safeFetch, validateUrl } from "@/lib/safe-fetch";
 
-const BLOCKED_HOSTNAMES = new Set(["localhost", "0.0.0.0", "127.0.0.1", "::1"]);
-
-function isPrivateOrBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(h)) return true;
-  if (h === "169.254.169.254") return true; // クラウドメタデータエンドポイント
-  if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
-  if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(h)) return true;
-  if (h.endsWith(".local")) return true;
-  return false;
-}
+export const runtime = "nodejs";
 
 function stripHtml(html: string): string {
   return html
@@ -51,41 +41,54 @@ export async function POST(req: NextRequest) {
     }
 
     const { url, brandName = "自社ブランド" } = await req.json();
-    if (!url) {
+    if (typeof url !== "string" || !url.trim()) {
       return NextResponse.json({ error: "対象サイトのURLを入力してください。" }, { status: 400 });
     }
 
     let parsedUrl: URL;
     try {
-      parsedUrl = new URL(url);
-    } catch {
-      return NextResponse.json({ error: "URLの形式が正しくありません。" }, { status: 400 });
+      parsedUrl = validateUrl(url);
+    } catch (validationErr: any) {
+      return NextResponse.json(
+        { error: `このURLは解析対象として利用できません: ${validationErr.message}` },
+        { status: 400 }
+      );
     }
 
-    if (!["http:", "https:"].includes(parsedUrl.protocol) || isPrivateOrBlockedHost(parsedUrl.hostname)) {
-      return NextResponse.json({ error: "このURLは解析対象として利用できません。" }, { status: 400 });
+    let pageText = "";
+    try {
+      const fetchResult = await safeFetch(parsedUrl.toString(), {
+        timeoutMs: 10000,
+        signal: req.signal,
+      });
+
+      if (fetchResult.status < 200 || fetchResult.status >= 300) {
+        return NextResponse.json(
+          { error: `対象URLの取得に失敗しました (HTTP ${fetchResult.status} ${fetchResult.statusText})。有効なWebページURLを指定してください。` },
+          { status: 400 }
+        );
+      }
+
+      const contentType = (fetchResult.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+      if (contentType && !["text/html", "application/xhtml+xml", "text/plain"].includes(contentType)) {
+        return NextResponse.json({ error: "本文を読み取れるWebページURLを指定してください。" }, { status: 400 });
+      }
+      pageText = stripHtml(fetchResult.body).slice(0, 12000);
+      if (!pageText || req.signal?.aborted) {
+        return NextResponse.json({ error: "対象ページの本文を取得できないか、処理が中断されました。" }, { status: 400 });
+      }
+    } catch (fetchError: any) {
+      console.warn("suggest-prompts: safeFetch failed", fetchError.message);
+      // SSRFや接続失敗時は有料Gemini APIを呼び出さず、安全に400エラーで停止する（意図しない課金を防止）
+      return NextResponse.json(
+        { error: `対象Webページの安全な取得に失敗したため、AI提案の処理を中止しました: ${fetchError.message}` },
+        { status: 400 }
+      );
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "GEMINI_API_KEY が設定されていません。" }, { status: 500 });
-    }
-
-    let pageText = "";
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const pageRes = await fetch(parsedUrl.toString(), {
-        signal: controller.signal,
-        headers: { "User-Agent": "GEOExplorerBot/1.0 (+https://geo-explorer.app)" },
-      });
-      clearTimeout(timeout);
-      if (pageRes.ok) {
-        const html = await pageRes.text();
-        pageText = stripHtml(html).slice(0, 12000);
-      }
-    } catch (fetchError) {
-      console.warn("suggest-prompts: page fetch failed, continuing with URL only", fetchError);
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -98,7 +101,7 @@ export async function POST(req: NextRequest) {
 ブランド名（想定）: ${brandName}
 サイト本文抜粋:
 """
-${pageText || "(本文取得不可のためURL・ドメイン名から推測)"}
+${pageText}
 """
 
 出力条件（最重要）:

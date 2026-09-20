@@ -4,9 +4,12 @@
  * 両方から呼び出す共通ロジックを1箇所に集約し、ATSスコアの算出方法が
  * 画面ごとに食い違う（＝ダッシュボードの数値に根拠がない）事態を防ぐ。
  */
+import { randomUUID } from "node:crypto";
+import { normalizeObservationLocale, OBSERVATION_MODELS } from "@/lib/observation-contract";
 import { GoogleGenAI } from "@google/genai";
 import {
   calculateATS,
+  matchesOfficialHost,
   type ATSInput,
   type BrandMention,
   type CitationSource,
@@ -22,49 +25,37 @@ export interface GeminiScanRaw {
   text: string;
   webSources: WebSource[];
   searchQueries: string[];
+  modelName: string;
+  logId: string;
+  measuredAt: string;
 }
 
 /**
  * Google Search Grounding 対応 Gemini モデルでのライブスキャン実行。
  * 主モデルが利用不可の場合は互換モデルへ自動フォールバックする。
+ * 実際に成功したモデル名（実モデル名）を返却し、固定保存や推測を排除する。
  */
-export async function runGeminiScan(
-  scanPrompt: string,
-  apiKey: string
-): Promise<GeminiScanRaw> {
+export interface ScanAttempt { modelName: string; logId: string; measuredAt: string; raw?: GeminiScanRaw; errorCode?: string; }
+export async function runGeminiScan(scanPrompt: string, apiKey: string, onAttempt?: (attempt: ScanAttempt) => Promise<void>): Promise<GeminiScanRaw> {
   const ai = new GoogleGenAI({ apiKey });
-
-  let response: any;
-  try {
-    response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: scanPrompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
-    });
-  } catch (modelError) {
-    console.warn("Primary model gemini-3.6-flash failed, retrying with gemini-2.0-flash...", modelError);
-    response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: scanPrompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
-    });
+  for (const modelName of OBSERVATION_MODELS) {
+    const logId = randomUUID();
+    let response: any, failed = false;
+    try { response = await ai.models.generateContent({ model: modelName, contents: scanPrompt, config: { tools: [{ googleSearch: {} }], temperature: 0.2 } }); }
+    catch { failed = true; }
+    const measuredAt = new Date().toISOString();
+    if (failed) { await onAttempt?.({ modelName, logId, measuredAt, errorCode: 'EXTERNAL_API_ERROR' }); continue; }
+    const candidate = response?.candidates?.[0];
+    const text = (Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []).filter((p: any) => p && typeof p.text === 'string' && !p.thought).map((p: any) => p.text).join('\n');
+    const metadata = candidate?.groundingMetadata;
+    const webSources = (Array.isArray(metadata?.groundingChunks) ? metadata.groundingChunks : []).filter((c: any) => c && typeof c.web?.uri === 'string').map((c: any) => ({ title: typeof c.web.title === 'string' ? c.web.title : '', url: c.web.uri }));
+    const searchQueries = (Array.isArray(metadata?.webSearchQueries) ? metadata.webSearchQueries : []).filter((q: unknown) => typeof q === 'string');
+    const raw = { text, webSources, searchQueries, modelName, logId, measuredAt };
+    // Persistence/evaluation failures must not trigger another billable model call.
+    await onAttempt?.({ modelName, logId, measuredAt, raw });
+    return raw;
   }
-
-  const candidate = response.candidates?.[0];
-  const text = candidate?.content?.parts?.[0]?.text || "";
-  const groundingMetadata = candidate?.groundingMetadata;
-  const searchChunks = groundingMetadata?.groundingChunks || [];
-
-  const webSources: WebSource[] = searchChunks
-    .filter((chunk: any) => chunk.web?.uri)
-    .map((chunk: any) => ({
-      title: chunk.web.title || "引用元ページ",
-      url: chunk.web.uri,
-    }));
-
-  const searchQueries: string[] = groundingMetadata?.webSearchQueries || [];
-
-  return { text, webSources, searchQueries };
+  throw new Error('EXTERNAL_API_ERROR');
 }
 
 /**
@@ -79,6 +70,7 @@ export function estimateRank(text: string, name: string): { rank: number; mentio
   if (!name || !text) return { rank: 0, mentionedInText: false };
 
   const normalizedName = name.trim().toLowerCase();
+  if (!normalizedName) return { rank: 0, mentionedInText: false };
   const lowerText = text.toLowerCase();
   const mentionedInText = lowerText.includes(normalizedName);
 
@@ -93,7 +85,7 @@ export function estimateRank(text: string, name: string): { rank: number; mentio
     if (m) {
       currentOrdinal = parseInt(m[1], 10);
     }
-    if (currentOrdinal > 0 && line.toLowerCase().includes(normalizedName)) {
+    if (m && currentOrdinal > 0 && line.toLowerCase().includes(normalizedName)) {
       return { rank: currentOrdinal, mentionedInText: true };
     }
   }
@@ -105,6 +97,8 @@ export interface ScanEvaluationInput {
   targetBrand: string;
   targetDomain: string;
   competitors: string[];
+  /** 競合の公式ドメインマップ（登録されている場合、対称採点として公式ドメイン引用を同等に判定） */
+  competitorDomains?: Record<string, string>;
   scanText: string;
   webSources: WebSource[];
   searchQueries: string[];
@@ -125,18 +119,13 @@ export interface ScanEvaluationResult {
  * ここで計算した値のみが唯一の正となるよう、画面側では再計算せずこの結果を表示する。
  */
 export function evaluateScan(input: ScanEvaluationInput): ScanEvaluationResult {
-  const { targetBrand, targetDomain, competitors, scanText, webSources, searchQueries } = input;
+  const { targetBrand, targetDomain, competitors, competitorDomains, scanText, webSources, searchQueries } = input;
 
   const cleanCompetitors = (competitors || []).filter(Boolean);
 
   const targetEstimate = estimateRank(scanText, targetBrand);
   const brandMentioned = targetEstimate.mentionedInText;
-  const brandCited = webSources.some(
-    (s) =>
-      s.title.toLowerCase().includes(targetBrand.toLowerCase()) ||
-      s.url.toLowerCase().includes(targetBrand.toLowerCase()) ||
-      (targetDomain && s.url.toLowerCase().includes(targetDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase()))
-  );
+  const brandCited = webSources.some(s => matchesOfficialHost(s.url, targetDomain));
 
   const competitorMentions: Record<string, boolean> = {};
   const brandMentions: BrandMention[] = [
@@ -163,7 +152,7 @@ export function evaluateScan(input: ScanEvaluationInput): ScanEvaluationResult {
   }
 
   let winLoss: ScanEvaluationResult["winLoss"] = "not_applicable";
-  if (cleanCompetitors.length > 0) {
+  if (cleanCompetitors.length > 0 && cleanCompetitors.every(c => competitorDomains?.[c])) {
     if (brandMentioned && !anyCompetitorMentioned) winLoss = "win";
     else if (brandMentioned && anyCompetitorMentioned) winLoss = "draw";
     else if (!brandMentioned && anyCompetitorMentioned) winLoss = "loss";
@@ -186,11 +175,12 @@ export function evaluateScan(input: ScanEvaluationInput): ScanEvaluationResult {
     targetBrand,
     targetDomain,
     competitors: cleanCompetitors,
+    competitorDomains,
     aiResponseText: scanText,
     brandMentions,
     citations,
     // 単発スキャンではファンアウト網羅率を実測できないため、
-    // 空配列を渡し中立スコア(10pt)として扱う（未計測を0点扱いにしない）。
+    // 空配列を渡す。未計測はNULLであり0点や架空の10点にしない。
     fanoutQueries: [],
     coveredFanoutsPerBrand: {},
   };
@@ -209,10 +199,11 @@ export function evaluateScan(input: ScanEvaluationInput): ScanEvaluationResult {
 }
 
 export function buildScanPrompt(prompt: string, targetLocale: string): string {
+  targetLocale = normalizeObservationLocale(targetLocale);
   if (targetLocale === "zh-TW") {
     return `請針對以下繁體中文商務搜尋詞，結合即時 Google 搜尋結果，提供客觀專業的比較排名、推薦品牌清單（附帶推薦理由）及關鍵引用來源：\n\n查詢詞: "${prompt}"`;
   }
-  if (targetLocale === "en") {
+  if (targetLocale === "en-US") {
     return `Perform an authoritative web search analysis using Google Search grounding for the following commercial query. Provide ranked brand recommendations (with specific reasons), comparative highlights, and key source citations:\n\nQuery: "${prompt}"`;
   }
   return `以下の商用・BtoB検索クエリについて、Googleウェブ検索連携（Grounding）を踏まえて最新の市場実態を反映した客観的な比較・ランキング解説（おすすめ上位企業/サービスと選定理由）、および引用元URLを提示してください。\n\nクエリ: "${prompt}"`;
