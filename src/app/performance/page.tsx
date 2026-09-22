@@ -474,7 +474,7 @@ function PerformanceInner() {
                 <Sparkles className="w-3.5 h-3.5" />
                 {lang === "zh-TW" ? "最新 Gemini 掃描解答結果" : lang === "en" ? "Latest Gemini Scan Response" : "最新の保存済み回答結果"}
               </div>
-              <p className="text-slate-300 text-[11px] leading-relaxed whitespace-pre-wrap font-sans">
+              <p className="text-slate-300 text-[11px] leading-relaxed whitespace-pre-wrap font-sans break-words [overflow-wrap:anywhere] max-w-full">
                 {activeReport.surface === 'gemini_api' && activeReport.scoreVersion === 'v2' ? 'Gemini API / v2 / ' + activeReport.modelName + ' / ' + activeReport.locale : '旧記録（観測面・採点版未確認）'}{'\n'}{activeReport.aiResponse}
               </p>
             </div>

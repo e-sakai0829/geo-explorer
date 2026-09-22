@@ -820,7 +820,7 @@ function PromptsContent() {
           )}
 
           {/* AI Response Text Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4 overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
                 <Sparkles className="w-4 h-4 text-indigo-600" />
@@ -831,7 +831,7 @@ function PromptsContent() {
               </span>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans break-words [overflow-wrap:anywhere] max-w-full">
               {result.aiResponse}
             </div>
 
