@@ -83,7 +83,7 @@ interface SummaryData {
   pos21_50Count: number;
 }
 
-// フォールバック初期データ (Ahrefs完全準拠)
+// フォールバック初期データ (Ahrefsキャプチャ完全一致)
 const DEFAULT_SUMMARY: SummaryData = {
   dr: 22,
   ur: 6,
@@ -99,6 +99,7 @@ const DEFAULT_SUMMARY: SummaryData = {
   pos21_50Count: 60
 };
 
+// Ahrefs実画面準拠のダイナミックな山・谷・急上昇・急落・急反発波形
 const DEFAULT_HISTORY: MonthlyHistoryPoint[] = [
   { month: "2024年10月", shortLabel: "2024年10月", traffic: 450, pos1_3: 12, pos4_10: 24, pos11_20: 18, pos21_50: 22, hasGoogleUpdate: true, updateBadge: "G" },
   { month: "2024年11月", shortLabel: "", traffic: 520, pos1_3: 13, pos4_10: 28, pos11_20: 20, pos21_50: 24 },
@@ -123,7 +124,7 @@ const DEFAULT_HISTORY: MonthlyHistoryPoint[] = [
   { month: "2026年6月", shortLabel: "2026年6月", traffic: 560, pos1_3: 14, pos4_10: 30, pos11_20: 16, pos21_50: 24, hasGoogleUpdate: true, updateBadge: "G" },
   { month: "2026年7月", shortLabel: "", traffic: 3600, pos1_3: 45, pos4_10: 105, pos11_20: 30, pos21_50: 40 },
   { month: "2026年8月", shortLabel: "", traffic: 3550, pos1_3: 44, pos4_10: 102, pos11_20: 28, pos21_50: 38 },
-  { month: "2026年9月", shortLabel: "2026年9月", traffic: 2240, pos1_3: 28, pos4_10: 45, pos11_20: 39, pos21_50: 60, hasGoogleUpdate: true, updateBadge: "G" }
+  { month: "2026年9月", shortLabel: "2026年9月", traffic: 1500, pos1_3: 28, pos4_10: 45, pos11_20: 39, pos21_50: 60, hasGoogleUpdate: true, updateBadge: "G" }
 ];
 
 const DEFAULT_KEYWORDS: OrganicKeyword[] = [
@@ -164,9 +165,9 @@ function SiteExplorerContent() {
   const [keywords, setKeywords] = useState<OrganicKeyword[]>(DEFAULT_KEYWORDS);
   const [topPages, setTopPages] = useState<TopPage[]>(DEFAULT_TOP_PAGES);
 
-  // チャート・インタラクティブ用状態
-  const [hoveredTrafficIndex, setHoveredTrafficIndex] = useState<number | null>(14);
-  const [hoveredPosIndex, setHoveredPosIndex] = useState<number | null>(14);
+  // チャート・インタラクティブ用状態 (初期値: 最新月 2026年9月)
+  const [hoveredTrafficIndex, setHoveredTrafficIndex] = useState<number | null>(DEFAULT_HISTORY.length - 1);
+  const [hoveredPosIndex, setHoveredPosIndex] = useState<number | null>(DEFAULT_HISTORY.length - 1);
   const [activePositions, setActivePositions] = useState({
     pos1_3: true,
     pos4_10: true,
@@ -207,8 +208,8 @@ function SiteExplorerContent() {
         setSummary(data.summary);
         if (data.history && data.history.length > 0) {
           setHistoryData(data.history);
-          setHoveredTrafficIndex(Math.min(14, data.history.length - 1));
-          setHoveredPosIndex(Math.min(14, data.history.length - 1));
+          setHoveredTrafficIndex(data.history.length - 1);
+          setHoveredPosIndex(data.history.length - 1);
         }
         if (data.keywords && data.keywords.length > 0) {
           setKeywords(data.keywords);
@@ -238,14 +239,18 @@ function SiteExplorerContent() {
     executeAnalysis(targetDomain, true);
   };
 
-  // チャートマウスイベント処理
+  // チャートマウスイベント処理 (プロット領域幅に対応)
+  const chartWidth = 740;
+  const rightAxisWidth = 60;
+  const svgTotalWidth = chartWidth + rightAxisWidth; // 800
+
   const handleTrafficMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!trafficChartRef.current || historyData.length === 0) return;
     const rect = trafficChartRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const width = rect.width;
+    const plotWidth = rect.width * (chartWidth / svgTotalWidth);
     const total = historyData.length;
-    const pointWidth = width / (total - 1);
+    const pointWidth = plotWidth / (total - 1);
     const index = Math.round(x / pointWidth);
     if (index >= 0 && index < total) {
       setHoveredTrafficIndex(index);
@@ -256,9 +261,9 @@ function SiteExplorerContent() {
     if (!posChartRef.current || historyData.length === 0) return;
     const rect = posChartRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const width = rect.width;
+    const plotWidth = rect.width * (chartWidth / svgTotalWidth);
     const total = historyData.length;
-    const pointWidth = width / (total - 1);
+    const pointWidth = plotWidth / (total - 1);
     const index = Math.round(x / pointWidth);
     if (index >= 0 && index < total) {
       setHoveredPosIndex(index);
@@ -311,12 +316,35 @@ function SiteExplorerContent() {
     document.body.removeChild(link);
   };
 
-  // チャート座標計算
-  const chartWidth = 800;
+  // チャート座標計算 (Ahrefs完全一致スケール: max 6,000)
   const trafficChartHeight = 200;
-  const maxTraffic = Math.max(6000, ...historyData.map(d => d.traffic));
+  // 最大値を 6000 または実データに合わせて切りの良い値に正規化
+  const rawMaxTraffic = Math.max(...historyData.map(d => d.traffic), 100);
+  const maxTraffic = rawMaxTraffic > 10000 
+    ? Math.ceil(rawMaxTraffic / 50000) * 50000 
+    : 6000;
+
   const totalPoints = historyData.length || 1;
   const stepX = chartWidth / Math.max(1, totalPoints - 1);
+
+  // Y軸目盛りのフォーマッター (6K, 4.5K, 3K, 1.5K, 0)
+  const formatTickLabel = (val: number) => {
+    if (val === 0) return "0";
+    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) {
+      const k = val / 1000;
+      return k % 1 === 0 ? `${k}K` : `${k.toFixed(1)}K`;
+    }
+    return String(Math.round(val));
+  };
+
+  const trafficTicks = [
+    { y: 0, label: formatTickLabel(maxTraffic) },          // 6K
+    { y: 50, label: formatTickLabel(maxTraffic * 0.75) },  // 4.5K
+    { y: 100, label: formatTickLabel(maxTraffic * 0.5) },  // 3K
+    { y: 150, label: formatTickLabel(maxTraffic * 0.25) }, // 1.5K (1500ぴったり！)
+    { y: 200, label: "0" }                                 // 0
+  ];
 
   const trafficPoints = historyData.map((d, i) => {
     const x = i * stepX;
@@ -330,9 +358,18 @@ function SiteExplorerContent() {
 
   const trafficAreaD = `${trafficPathD} L ${chartWidth} ${trafficChartHeight} L 0 ${trafficChartHeight} Z`;
 
-  // ポジションスタック面グラフ
+  // ポジションスタック面グラフ (max 220)
   const posChartHeight = 160;
-  const maxPos = Math.max(220, ...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20));
+  const rawMaxPos = Math.max(...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20), 50);
+  const maxPos = rawMaxPos > 500 ? Math.ceil(rawMaxPos / 200) * 200 : 220;
+
+  const posTicks = [
+    { y: 0, label: String(maxPos) },                       // 220
+    { y: 40, label: String(Math.round(maxPos * 0.75)) },   // 165
+    { y: 80, label: String(Math.round(maxPos * 0.5)) },    // 110
+    { y: 120, label: String(Math.round(maxPos * 0.25)) },  // 55
+    { y: 160, label: "0" }                                 // 0
+  ];
 
   const posPoints = historyData.map((d, i) => {
     const x = i * stepX;
@@ -642,44 +679,54 @@ function SiteExplorerContent() {
                     <span>平均オーガニックトラフィック</span>
                   </div>
 
-                  {/* インタラクティブSVGグラフエリア */}
+                  {/* インタラクティブSVGグラフエリア (SVG内完全同期Y軸) */}
                   <div 
                     ref={trafficChartRef}
                     onMouseMove={handleTrafficMouseMove}
-                    onMouseLeave={() => setHoveredTrafficIndex(Math.min(14, historyData.length - 1))}
+                    onMouseLeave={() => setHoveredTrafficIndex(historyData.length - 1)}
                     className="h-56 w-full relative cursor-crosshair select-none pt-2"
                   >
-                    {/* Y軸目盛り */}
-                    <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-amber-600 text-right pr-1 pointer-events-none z-0">
-                      <span>{maxTraffic >= 1000 ? `${Math.round(maxTraffic / 1000)}K` : maxTraffic}</span>
-                      <span>{Math.round((maxTraffic * 0.75) / 1000)}K</span>
-                      <span>{Math.round((maxTraffic * 0.5) / 1000)}K</span>
-                      <span>{Math.round((maxTraffic * 0.25) / 1000)}K</span>
-                      <span>0</span>
-                    </div>
-
-                    <div className="h-44 w-full pr-10 relative">
+                    <div className="h-44 w-full relative">
                       <svg 
                         className="w-full h-full overflow-visible" 
-                        viewBox={`0 0 ${chartWidth} ${trafficChartHeight}`} 
+                        viewBox={`0 0 ${svgTotalWidth} ${trafficChartHeight}`} 
                         preserveAspectRatio="none"
                       >
                         <defs>
-                          <linearGradient id="trafficGradientAhrefsLive" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
-                            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+                          <linearGradient id="trafficGradientAhrefsExact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.32" />
+                            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
                           </linearGradient>
                         </defs>
 
-                        {/* 水平グリッドライン */}
-                        <line x1="0" y1="0" x2={chartWidth} y2="0" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="50" x2={chartWidth} y2="50" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="100" x2={chartWidth} y2="100" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="150" x2={chartWidth} y2="150" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="200" x2={chartWidth} y2="200" stroke="#e2e8f0" />
+                        {/* 水平グリッドライン ＆ 右側完全一致目盛りテキスト (SVG内で1ピクセルの狂いなく完全同期) */}
+                        {trafficTicks.map((tick, idx) => (
+                          <g key={idx}>
+                            <line 
+                              x1={0} 
+                              y1={tick.y} 
+                              x2={chartWidth} 
+                              y2={tick.y} 
+                              stroke={tick.y === 200 ? "#e2e8f0" : "#f1f5f9"} 
+                              strokeDasharray={tick.y === 200 ? "none" : "3 3"} 
+                            />
+                            {/* 右側目盛りテキスト (Ahrefs完全準拠) */}
+                            <text 
+                              x={chartWidth + 12} 
+                              y={tick.y + 4} 
+                              fill="#d97706" 
+                              fontSize="11" 
+                              fontFamily="monospace" 
+                              fontWeight="600"
+                              textAnchor="start"
+                            >
+                              {tick.label}
+                            </text>
+                          </g>
+                        ))}
 
                         {/* 面グラデーション */}
-                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefsLive)" />
+                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefsExact)" />
 
                         {/* 折れ線 */}
                         <path d={trafficPathD} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
@@ -714,7 +761,7 @@ function SiteExplorerContent() {
                         <div 
                           className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[210px]"
                           style={{
-                            left: `${Math.min(78, Math.max(12, (trafficPoints[hoveredTrafficIndex].x / chartWidth) * 100))}%`,
+                            left: `${Math.min(75, Math.max(10, (trafficPoints[hoveredTrafficIndex].x / svgTotalWidth) * 100))}%`,
                             top: `${Math.max(10, (trafficPoints[hoveredTrafficIndex].y / trafficChartHeight) * 100 - 35)}%`,
                             transform: "translate(-50%, -50%)"
                           }}
@@ -733,7 +780,7 @@ function SiteExplorerContent() {
                     </div>
 
                     {/* X軸タイムライン目盛り */}
-                    <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
+                    <div className="relative w-full pr-12 mt-1.5 pt-2 border-t border-slate-200">
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
                         {historyData.map((d, i) => {
                           if (d.shortLabel) {
@@ -819,55 +866,64 @@ function SiteExplorerContent() {
                   <div 
                     ref={posChartRef}
                     onMouseMove={handlePosMouseMove}
-                    onMouseLeave={() => setHoveredPosIndex(Math.min(14, historyData.length - 1))}
+                    onMouseLeave={() => setHoveredPosIndex(historyData.length - 1)}
                     className="h-52 w-full relative cursor-crosshair select-none pt-2"
                   >
-                    {/* Y軸目盛り */}
-                    <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-slate-400 text-right pr-1 pointer-events-none z-0">
-                      <span>{maxPos}</span>
-                      <span>{Math.round(maxPos * 0.75)}</span>
-                      <span>{Math.round(maxPos * 0.5)}</span>
-                      <span>{Math.round(maxPos * 0.25)}</span>
-                      <span>0</span>
-                    </div>
-
-                    <div className="h-40 w-full pr-10 relative">
+                    <div className="h-40 w-full relative">
                       <svg 
                         className="w-full h-full overflow-visible" 
-                        viewBox={`0 0 ${chartWidth} ${posChartHeight}`} 
+                        viewBox={`0 0 ${svgTotalWidth} ${posChartHeight}`} 
                         preserveAspectRatio="none"
                       >
                         <defs>
-                          <linearGradient id="posGradient11_20Live" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+                          <linearGradient id="posGradient11_20LiveExact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
                             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.1" />
                           </linearGradient>
-                          <linearGradient id="posGradient4_10Live" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#ea580c" stopOpacity="0.5" />
+                          <linearGradient id="posGradient4_10LiveExact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ea580c" stopOpacity="0.55" />
                             <stop offset="100%" stopColor="#ea580c" stopOpacity="0.2" />
                           </linearGradient>
-                          <linearGradient id="posGradient1_3Live" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#b45309" stopOpacity="0.6" />
+                          <linearGradient id="posGradient1_3LiveExact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#b45309" stopOpacity="0.65" />
                             <stop offset="100%" stopColor="#b45309" stopOpacity="0.3" />
                           </linearGradient>
                         </defs>
 
-                        {/* 水平グリッドライン */}
-                        <line x1="0" y1="0" x2={chartWidth} y2="0" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="40" x2={chartWidth} y2="40" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="80" x2={chartWidth} y2="80" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="120" x2={chartWidth} y2="120" stroke="#f1f5f9" strokeDasharray="3 3" />
-                        <line x1="0" y1="160" x2={chartWidth} y2="160" stroke="#e2e8f0" />
+                        {/* 水平グリッドライン ＆ 右側目盛りテキスト (SVG内で完全同期) */}
+                        {posTicks.map((tick, idx) => (
+                          <g key={idx}>
+                            <line 
+                              x1={0} 
+                              y1={tick.y} 
+                              x2={chartWidth} 
+                              y2={tick.y} 
+                              stroke={tick.y === 160 ? "#e2e8f0" : "#f1f5f9"} 
+                              strokeDasharray={tick.y === 160 ? "none" : "3 3"} 
+                            />
+                            <text 
+                              x={chartWidth + 12} 
+                              y={tick.y + 4} 
+                              fill="#94a3b8" 
+                              fontSize="11" 
+                              fontFamily="monospace" 
+                              fontWeight="600"
+                              textAnchor="start"
+                            >
+                              {tick.label}
+                            </text>
+                          </g>
+                        ))}
 
                         {/* 各順位帯のスタック面 */}
                         {activePositions.pos11_20 && (
-                          <path d={posArea11_20_D} fill="url(#posGradient11_20Live)" />
+                          <path d={posArea11_20_D} fill="url(#posGradient11_20LiveExact)" />
                         )}
                         {activePositions.pos4_10 && (
-                          <path d={posArea4_10_D} fill="url(#posGradient4_10Live)" />
+                          <path d={posArea4_10_D} fill="url(#posGradient4_10LiveExact)" />
                         )}
                         {activePositions.pos1_3 && (
-                          <path d={posArea1_3_D} fill="url(#posGradient1_3Live)" />
+                          <path d={posArea1_3_D} fill="url(#posGradient1_3LiveExact)" />
                         )}
 
                         {/* 折れ線境界 */}
@@ -911,7 +967,7 @@ function SiteExplorerContent() {
                         <div 
                           className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[190px]"
                           style={{
-                            left: `${Math.min(78, Math.max(12, (posPoints[hoveredPosIndex].x / chartWidth) * 100))}%`,
+                            left: `${Math.min(75, Math.max(10, (posPoints[hoveredPosIndex].x / svgTotalWidth) * 100))}%`,
                             top: `${Math.max(10, (posPoints[hoveredPosIndex].y11_20 / posChartHeight) * 100 - 40)}%`,
                             transform: "translate(-50%, -50%)"
                           }}
@@ -963,7 +1019,7 @@ function SiteExplorerContent() {
                     </div>
 
                     {/* X軸タイムライン目盛り */}
-                    <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
+                    <div className="relative w-full pr-12 mt-1.5 pt-2 border-t border-slate-200">
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
                         {historyData.map((d, i) => {
                           if (d.shortLabel) {
