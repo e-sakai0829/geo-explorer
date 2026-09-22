@@ -15,7 +15,8 @@ import {
   TrendingUp,
   BookOpen,
   LogOut,
-  User
+  User,
+  BarChart3
 } from "lucide-react";
 import ConsultingModal from "@/components/ConsultingModal";
 
@@ -23,7 +24,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("マイプロジェクト");
   const [projectDomain, setProjectDomain] = useState<string>("");
@@ -40,6 +41,11 @@ export default function Sidebar() {
       name: lang === "zh-TW" ? "儀表板" : lang === "en" ? "Dashboard" : "ダッシュボード", 
       href: "/dashboard", 
       icon: LayoutDashboard 
+    },
+    { 
+      name: lang === "zh-TW" ? "SEO 競爭關鍵字分析" : lang === "en" ? "SEO Keyword Gap" : "SEO競合KWギャップ", 
+      href: "/seo", 
+      icon: BarChart3 
     },
     { 
       name: lang === "zh-TW" ? "Prompt Explorer (GEO)" : lang === "en" ? "Prompt Explorer" : "Prompt Explorer (GEO)", 
