@@ -16,7 +16,8 @@ import {
   BookOpen,
   LogOut,
   User,
-  BarChart3
+  BarChart3,
+  FileText
 } from "lucide-react";
 import ConsultingModal from "@/components/ConsultingModal";
 
@@ -46,6 +47,11 @@ export default function Sidebar() {
       name: lang === "zh-TW" ? "SEO 競爭關鍵字分析" : lang === "en" ? "SEO Keyword Gap" : "SEO競合KWギャップ", 
       href: "/seo", 
       icon: BarChart3 
+    },
+    { 
+      name: lang === "zh-TW" ? "SEO 關鍵字文章生成" : lang === "en" ? "SEO Article Studio" : "SEO記事制作スタジオ", 
+      href: "/seo/article-generator", 
+      icon: FileText 
     },
     { 
       name: lang === "zh-TW" ? "Prompt Explorer (GEO)" : lang === "en" ? "Prompt Explorer" : "Prompt Explorer (GEO)", 
