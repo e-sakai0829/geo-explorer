@@ -146,6 +146,77 @@ const DEFAULT_TOP_PAGES: TopPage[] = [
   { id: "3", url: "https://www.daiwa-logi.co.jp/product.html", pageType: "Product", ur: 5.0, traffic: 43, trafficShare: 2.8, trafficValue: 31.0, refDomains: 1, keywordsCount: 7, topKeyword: "自動梱包機", topKeywordPos: 7, topKeywordVol: 400 },
 ];
 
+// --- Ahrefs完全準拠: 4等分でキリの良い数値・等差目盛りを自動算出するNice Scaleアルゴリズム ---
+interface NiceScaleResult {
+  max: number;
+  step: number;
+  ticks: Array<{ yPercent: number; value: number; label: string }>;
+}
+
+function calculateNiceScale(rawMax: number, numDivisions = 4): NiceScaleResult {
+  if (rawMax <= 0) {
+    return {
+      max: 100,
+      step: 25,
+      ticks: [
+        { yPercent: 0, value: 100, label: "100" },
+        { yPercent: 25, value: 75, label: "75" },
+        { yPercent: 50, value: 50, label: "50" },
+        { yPercent: 75, value: 25, label: "25" },
+        { yPercent: 100, value: 0, label: "0" }
+      ]
+    };
+  }
+
+  // 頂点が最上段グリッドにベタ付きしないよう約5%のマージンを考慮
+  const targetMax = rawMax * 1.05;
+  const rawStep = targetMax / numDivisions;
+  const exponent = Math.floor(Math.log10(rawStep));
+  const fraction = rawStep / Math.pow(10, exponent);
+
+  let niceFraction: number;
+  if (fraction <= 1.0) niceFraction = 1.0;
+  else if (fraction <= 1.5) niceFraction = 1.5;
+  else if (fraction <= 2.0) niceFraction = 2.0;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 3.0) niceFraction = 3.0;
+  else if (fraction <= 4.0) niceFraction = 4.0;
+  else if (fraction <= 5.0) niceFraction = 5.0;
+  else if (fraction <= 6.0) niceFraction = 6.0;
+  else if (fraction <= 8.0) niceFraction = 8.0;
+  else niceFraction = 10.0;
+
+  const step = niceFraction * Math.pow(10, exponent);
+  const max = step * numDivisions;
+
+  const ticks: Array<{ yPercent: number; value: number; label: string }> = [];
+  for (let i = numDivisions; i >= 0; i--) {
+    const val = Math.round(step * i);
+    const yPercent = ((numDivisions - i) / numDivisions) * 100;
+    ticks.push({
+      yPercent,
+      value: val,
+      label: formatTickLabel(val)
+    });
+  }
+
+  return { max, step, ticks };
+}
+
+// Y軸目盛りのフォーマッター (6K, 4.5K, 3K, 1.5K, 0, 1M, 500 等)
+function formatTickLabel(val: number): string {
+  if (val === 0) return "0";
+  if (val >= 1000000) {
+    const m = val / 1000000;
+    return m % 1 === 0 ? `${m}M` : `${parseFloat(m.toFixed(2))}M`;
+  }
+  if (val >= 1000) {
+    const k = val / 1000;
+    return k % 1 === 0 ? `${k}K` : `${parseFloat(k.toFixed(2))}K`;
+  }
+  return String(Math.round(val));
+}
+
 function SiteExplorerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -316,35 +387,20 @@ function SiteExplorerContent() {
     document.body.removeChild(link);
   };
 
-  // チャート座標計算 (Ahrefs完全一致スケール: max 6,000)
+  // --- 動的Y軸スケール計算 (Ahrefs完全準拠のNice Scale) ---
   const trafficChartHeight = 200;
-  // 最大値を 6000 または実データに合わせて切りの良い値に正規化
   const rawMaxTraffic = Math.max(...historyData.map(d => d.traffic), 100);
-  const maxTraffic = rawMaxTraffic > 10000 
-    ? Math.ceil(rawMaxTraffic / 50000) * 50000 
-    : 6000;
+  const trafficScale = calculateNiceScale(rawMaxTraffic, 4);
+  const maxTraffic = trafficScale.max;
 
   const totalPoints = historyData.length || 1;
   const stepX = chartWidth / Math.max(1, totalPoints - 1);
 
-  // Y軸目盛りのフォーマッター (6K, 4.5K, 3K, 1.5K, 0)
-  const formatTickLabel = (val: number) => {
-    if (val === 0) return "0";
-    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) {
-      const k = val / 1000;
-      return k % 1 === 0 ? `${k}K` : `${k.toFixed(1)}K`;
-    }
-    return String(Math.round(val));
-  };
-
-  const trafficTicks = [
-    { y: 0, label: formatTickLabel(maxTraffic) },          // 6K
-    { y: 50, label: formatTickLabel(maxTraffic * 0.75) },  // 4.5K
-    { y: 100, label: formatTickLabel(maxTraffic * 0.5) },  // 3K
-    { y: 150, label: formatTickLabel(maxTraffic * 0.25) }, // 1.5K (1500ぴったり！)
-    { y: 200, label: "0" }                                 // 0
-  ];
+  // 4等分の動的目盛り (SVG高さ200pxに対応)
+  const trafficTicks = trafficScale.ticks.map(t => ({
+    y: (t.yPercent / 100) * trafficChartHeight,
+    label: t.label
+  }));
 
   const trafficPoints = historyData.map((d, i) => {
     const x = i * stepX;
@@ -358,18 +414,16 @@ function SiteExplorerContent() {
 
   const trafficAreaD = `${trafficPathD} L ${chartWidth} ${trafficChartHeight} L 0 ${trafficChartHeight} Z`;
 
-  // ポジションスタック面グラフ (max 220)
+  // ポジションスタック面グラフ (動的Nice Scale)
   const posChartHeight = 160;
-  const rawMaxPos = Math.max(...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20), 50);
-  const maxPos = rawMaxPos > 500 ? Math.ceil(rawMaxPos / 200) * 200 : 220;
+  const rawMaxPos = Math.max(...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20), 10);
+  const posScale = calculateNiceScale(rawMaxPos, 4);
+  const maxPos = posScale.max;
 
-  const posTicks = [
-    { y: 0, label: String(maxPos) },                       // 220
-    { y: 40, label: String(Math.round(maxPos * 0.75)) },   // 165
-    { y: 80, label: String(Math.round(maxPos * 0.5)) },    // 110
-    { y: 120, label: String(Math.round(maxPos * 0.25)) },  // 55
-    { y: 160, label: "0" }                                 // 0
-  ];
+  const posTicks = posScale.ticks.map(t => ({
+    y: (t.yPercent / 100) * posChartHeight,
+    label: t.label
+  }));
 
   const posPoints = historyData.map((d, i) => {
     const x = i * stepX;
@@ -679,7 +733,7 @@ function SiteExplorerContent() {
                     <span>平均オーガニックトラフィック</span>
                   </div>
 
-                  {/* インタラクティブSVGグラフエリア (SVG内完全同期Y軸) */}
+                  {/* インタラクティブSVGグラフエリア (動的Niceスケール＆SVG内完全同期) */}
                   <div 
                     ref={trafficChartRef}
                     onMouseMove={handleTrafficMouseMove}
@@ -693,13 +747,13 @@ function SiteExplorerContent() {
                         preserveAspectRatio="none"
                       >
                         <defs>
-                          <linearGradient id="trafficGradientAhrefsExact" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="trafficGradientAhrefsDynamic" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.32" />
                             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
                           </linearGradient>
                         </defs>
 
-                        {/* 水平グリッドライン ＆ 右側完全一致目盛りテキスト (SVG内で1ピクセルの狂いなく完全同期) */}
+                        {/* 水平グリッドライン ＆ 右側完全一致目盛りテキスト */}
                         {trafficTicks.map((tick, idx) => (
                           <g key={idx}>
                             <line 
@@ -710,7 +764,6 @@ function SiteExplorerContent() {
                               stroke={tick.y === 200 ? "#e2e8f0" : "#f1f5f9"} 
                               strokeDasharray={tick.y === 200 ? "none" : "3 3"} 
                             />
-                            {/* 右側目盛りテキスト (Ahrefs完全準拠) */}
                             <text 
                               x={chartWidth + 12} 
                               y={tick.y + 4} 
@@ -726,7 +779,7 @@ function SiteExplorerContent() {
                         ))}
 
                         {/* 面グラデーション */}
-                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefsExact)" />
+                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefsDynamic)" />
 
                         {/* 折れ線 */}
                         <path d={trafficPathD} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
@@ -890,7 +943,7 @@ function SiteExplorerContent() {
                           </linearGradient>
                         </defs>
 
-                        {/* 水平グリッドライン ＆ 右側目盛りテキスト (SVG内で完全同期) */}
+                        {/* 水平グリッドライン ＆ 右側目盛りテキスト */}
                         {posTicks.map((tick, idx) => (
                           <g key={idx}>
                             <line 
