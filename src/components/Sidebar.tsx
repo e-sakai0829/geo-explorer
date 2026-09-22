@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { useLanguage } from "@/context/LanguageContext";
 import { 
@@ -17,12 +17,33 @@ import {
   LogOut,
   User,
   BarChart3,
-  FileText
+  FileText,
+  Globe,
+  ChevronRight
 } from "lucide-react";
 import ConsultingModal from "@/components/ConsultingModal";
 
+interface SubItem {
+  name: string;
+  href: string;
+  tabKey?: string;
+}
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  subItems?: SubItem[];
+}
+
+interface NavSection {
+  title: string | null;
+  items: NavItem[];
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const supabase = createClient();
   const { lang, t } = useLanguage();
@@ -37,52 +58,91 @@ export default function Sidebar() {
     remaining: 10,
   });
 
-  const navigation = [
-    { 
-      name: lang === "zh-TW" ? "儀表板" : lang === "en" ? "Dashboard" : "ダッシュボード", 
-      href: "/dashboard", 
-      icon: LayoutDashboard 
+  const currentTab = searchParams.get("tab");
+
+  const navSections: NavSection[] = [
+    {
+      title: null,
+      items: [
+        { 
+          name: lang === "zh-TW" ? "儀表板" : lang === "en" ? "Dashboard" : "ダッシュボード", 
+          href: "/dashboard", 
+          icon: LayoutDashboard 
+        },
+      ]
     },
-    { 
-      name: lang === "zh-TW" ? "SEO 競爭關鍵字分析" : lang === "en" ? "SEO Keyword Gap" : "SEO競合KWギャップ", 
-      href: "/seo", 
-      icon: BarChart3 
+    {
+      title: "SEO",
+      items: [
+        { 
+          name: lang === "zh-TW" ? "網站分析" : lang === "en" ? "Site Explorer" : "サイトエクスプローラー", 
+          href: "/seo/site-explorer", 
+          icon: Globe,
+          subItems: [
+            {
+              name: lang === "zh-TW" ? "自然關鍵字" : lang === "en" ? "Organic Keywords" : "オーガニックKW",
+              href: "/seo/site-explorer?tab=keywords",
+              tabKey: "keywords"
+            },
+            {
+              name: lang === "zh-TW" ? "熱門頁面" : lang === "en" ? "Top Pages" : "上位ページ",
+              href: "/seo/site-explorer?tab=pages",
+              tabKey: "pages"
+            }
+          ]
+        },
+        { 
+          name: lang === "zh-TW" ? "SEO 競爭關鍵字分析" : lang === "en" ? "Keyword Gap" : "KWギャップ", 
+          href: "/seo", 
+          icon: BarChart3 
+        },
+        { 
+          name: lang === "zh-TW" ? "SEO 關鍵字文章生成" : lang === "en" ? "SEO Article Studio" : "記事制作", 
+          href: "/seo/article-generator", 
+          icon: FileText 
+        },
+      ]
     },
-    { 
-      name: lang === "zh-TW" ? "SEO 關鍵字文章生成" : lang === "en" ? "SEO Article Studio" : "SEO記事制作スタジオ", 
-      href: "/seo/article-generator", 
-      icon: FileText 
+    {
+      title: "GEO",
+      items: [
+        { 
+          name: "Prompt Explorer", 
+          href: "/prompts", 
+          icon: Search 
+        },
+        { 
+          name: lang === "zh-TW" ? "AEO 權威直答編輯器" : lang === "en" ? "AEO Content Editor" : "AEO記事制作", 
+          href: "/editor", 
+          icon: Sparkles 
+        },
+        { 
+          name: lang === "zh-TW" ? "AI 引用來源媒體分析" : lang === "en" ? "Citation Sources" : "引用メディア分析", 
+          href: "/citations", 
+          icon: Link2 
+        },
+        { 
+          name: lang === "zh-TW" ? "成效追蹤 (Before/After)" : lang === "en" ? "Performance Tracker" : "効果測定 (Before/After)", 
+          href: "/performance", 
+          icon: TrendingUp 
+        },
+      ]
     },
-    { 
-      name: lang === "zh-TW" ? "Prompt Explorer (GEO)" : lang === "en" ? "Prompt Explorer" : "Prompt Explorer (GEO)", 
-      href: "/prompts", 
-      icon: Search 
-    },
-    { 
-      name: lang === "zh-TW" ? "AEO 權威直答編輯器" : lang === "en" ? "AEO Content Editor" : "AEO直答記事エディタ", 
-      href: "/editor", 
-      icon: Sparkles 
-    },
-    { 
-      name: lang === "zh-TW" ? "AI 引用來源媒體分析" : lang === "en" ? "Citation Sources" : "AI引用メディア分析", 
-      href: "/citations", 
-      icon: Link2 
-    },
-    { 
-      name: lang === "zh-TW" ? "成效追蹤 (Before/After)" : lang === "en" ? "Performance Tracker" : "効果測定 (Before/After)", 
-      href: "/performance", 
-      icon: TrendingUp 
-    },
-    { 
-      name: lang === "zh-TW" ? "官方專欄 ＆ 知識庫" : lang === "en" ? "Insights & Knowledge" : "公式コラム・ナレッジ", 
-      href: "/insights", 
-      icon: BookOpen 
-    },
-    { 
-      name: lang === "zh-TW" ? "方案 ＆ 額度管理" : lang === "en" ? "Pricing & Credits" : "料金・クレジット", 
-      href: "/pricing", 
-      icon: CreditCard 
-    },
+    {
+      title: lang === "zh-TW" ? "管理 ＆ 資訊" : lang === "en" ? "Management" : "その他",
+      items: [
+        { 
+          name: lang === "zh-TW" ? "官方專欄 ＆ 知識庫" : lang === "en" ? "Insights & Knowledge" : "公式コラム・ナレッジ", 
+          href: "/insights", 
+          icon: BookOpen 
+        },
+        { 
+          name: lang === "zh-TW" ? "方案 ＆ 額度管理" : lang === "en" ? "Pricing & Credits" : "料金・クレジット", 
+          href: "/pricing", 
+          icon: CreditCard 
+        },
+      ]
+    }
   ];
 
   useEffect(() => {
@@ -99,23 +159,21 @@ export default function Sidebar() {
         if (data && !data.error) {
           setPlanName(data.plan.charAt(0).toUpperCase() + data.plan.slice(1));
           setCredits({
-            total: data.monthly_credits || 10,
-            used: data.used_credits || 0,
-            remaining: data.remaining_credits || 10,
+            total: data.monthlyCredits,
+            used: data.usedCredits,
+            remaining: data.remainingCredits,
           });
         }
       })
       .catch(() => {});
 
-    // DBプロジェクト設定の取得
+    // アクティブプロジェクトの取得
     fetch("/api/user/project")
       .then((res) => res.json())
       .then((data) => {
-        if (data?.project?.name) {
-          setProjectName(data.project.name);
-        }
-        if (data?.project?.domain && !data.project.domain.includes("example.com")) {
-          setProjectDomain(data.project.domain);
+        if (data && data.project) {
+          if (data.project.name) setProjectName(data.project.name);
+          if (data.project.domain) setProjectDomain(data.project.domain);
         }
       })
       .catch(() => {});
@@ -160,31 +218,74 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Nav Menu */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <div className="text-[10px] font-semibold text-slate-400 px-3 pb-2 uppercase tracking-wider">
-          {lang === "zh-TW" ? "主要功能選單" : lang === "en" ? "Main Navigation" : "メインメニュー"}
-        </div>
-        {navigation.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+      {/* Navigation Links */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        {navSections.map((section, sIdx) => {
           return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                isActive
-                  ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <item.icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
-              <span>{item.name}</span>
-            </Link>
+            <div key={sIdx} className="space-y-1">
+              {section.title && (
+                <div className="px-3 py-1 text-[11px] font-bold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                  {section.title}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isParentActive = pathname === item.href;
+
+                  return (
+                    <div key={item.href} className="space-y-0.5">
+                      <Link
+                        href={item.href}
+                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                          isParentActive && (!item.subItems || !currentTab)
+                            ? "bg-indigo-50 text-indigo-700 shadow-2xs"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon className={`w-4 h-4 ${
+                            isParentActive && (!item.subItems || !currentTab)
+                              ? "text-indigo-600" 
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`} />
+                          <span>{item.name}</span>
+                        </div>
+                      </Link>
+
+                      {/* Sub-items if available (e.g. サイトエクスプローラー配下の オーガニックKW / 上位ページ) */}
+                      {item.subItems && (
+                        <div className="ml-5 pl-3 border-l border-slate-200 space-y-0.5 my-0.5">
+                          {item.subItems.map((sub) => {
+                            const isSubActive = pathname === item.href && currentTab === sub.tabKey;
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                                  isSubActive
+                                    ? "bg-indigo-50 text-indigo-700 font-bold"
+                                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span className={`w-1 h-1 rounded-full ${isSubActive ? "bg-indigo-600" : "bg-slate-300"}`} />
+                                <span>{sub.name}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
 
         {/* マーケティングコンサルティング相談 CTA */}
-        <div className="pt-3 px-1">
+        <div className="pt-2 px-1">
           <div className="p-3 bg-gradient-to-br from-indigo-900 to-slate-900 rounded-xl text-white shadow-md border border-indigo-500/20 space-y-2">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-300 tracking-wider uppercase">
               <Sparkles className="w-3 h-3 text-indigo-400" />
