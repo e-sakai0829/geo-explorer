@@ -2,86 +2,125 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { isUuid } from "@/lib/observation-contract";
 
-export interface KeywordGapItem {
-  id: string;
-  keyword: string;
-  intent: "investigation" | "commercial" | "transactional" | "informational";
-  volume: number;
-  kd: number; // Keyword Difficulty 0-100
-  cpc: number;
-  targetRank: number | null; // null represents 圏外 (out of top 50)
-  targetUrl: string | null;
-  competitorRanks: Record<string, number | null>;
-  gapType: "missing" | "weak" | "strong" | "shared";
-  suggestedPrompt: string; // Query for Prompt Explorer (GEO)
-}
-
-export interface DomainSeoSummary {
-  name: string;
+export interface MierucaDomainSummary {
   domain: string;
-  isTarget: boolean;
+  url: string;
+  color: string;
+  totalTraffic: number;
   totalKeywords: number;
-  estimatedTraffic: number;
   rankDistribution: {
-    top3: number;
-    top10: number;
-    top20: number;
-    top50: number;
+    rank1: number;       // 1位
+    rank2_3: number;     // 2位-3位
+    rank4_10: number;    // 4位-10位
+    rank11_20: number;   // 11位-20位
+    rank21_plus: number; // 21位圏外
   };
 }
 
-// ドメイン名から関連する業種キーワードをシード生成するヘルパー
-function generateDomainKeywords(targetBrand: string, targetDomain: string, competitors: string[]): KeywordGapItem[] {
-  const cleanDomain = targetDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
-  
-  // ドメインやブランド名に応じたシードカテゴリの判定
-  const isMarketingOrTech = /marketing|seo|geo|ai|tech|cloud|dx|tool|software|saas|biz|service/.test(cleanDomain) ||
-                           /マーケ|AI|クラウド|ツール|DX|コンサル/.test(targetBrand);
+export interface MierucaKeywordItem {
+  id: string;
+  keyword: string;
+  volume: number;
+  cpc: number;
+  domainStats: Record<string, {
+    rank: number | null;
+    traffic: number | null;
+    rankChange: number; // +2 = ↑2, -1 = ↓1, 0 = →0
+  }>;
+}
 
-  const baseKeywords = isMarketingOrTech
-    ? [
-        { kw: `${targetBrand} 評判`, intent: "investigation" as const, vol: 1400, kd: 28, cpc: 320, gap: "strong" as const, pRank: 2, cRanks: [null, 15] },
-        { kw: "AI 検索 最適化 ツール 比較", intent: "commercial" as const, vol: 3600, kd: 45, cpc: 850, gap: "missing" as const, pRank: null, cRanks: [3, 8] },
-        { kw: "GEO 対策 やり方 初心者", intent: "informational" as const, vol: 2400, kd: 32, cpc: 480, gap: "missing" as const, pRank: null, cRanks: [4, 12] },
-        { kw: "Google AI Overviews 引用 獲得 方法", intent: "informational" as const, vol: 4800, kd: 52, cpc: 620, gap: "weak" as const, pRank: 18, cRanks: [2, 5] },
-        { kw: "BtoB マーケティング AI ツール おすすめ", intent: "commercial" as const, vol: 2900, kd: 48, cpc: 950, gap: "missing" as const, pRank: null, cRanks: [1, 6] },
-        { kw: "SEO AIO 統合 分析 SaaS", intent: "transactional" as const, vol: 1800, kd: 38, cpc: 1100, gap: "strong" as const, pRank: 1, cRanks: [14, null] },
-        { kw: "Perplexity 引用 元 調査", intent: "informational" as const, vol: 1200, kd: 25, cpc: 350, gap: "weak" as const, pRank: 14, cRanks: [5, 9] },
-        { kw: "検索 順位 下落 対策 2026", intent: "investigation" as const, vol: 5400, kd: 64, cpc: 780, gap: "weak" as const, pRank: 24, cRanks: [6, 11] },
-        { kw: "LLMO 対策 コンサル 会社 費用", intent: "transactional" as const, vol: 980, kd: 35, cpc: 1400, gap: "shared" as const, pRank: 4, cRanks: [3, 7] },
-        { kw: "AI 検索 被リンク ドメイン 評価", intent: "informational" as const, vol: 1600, kd: 41, cpc: 520, gap: "missing" as const, pRank: null, cRanks: [5, null] },
-        { kw: "記事 生成 AI 自動 化 費用 対 効果", intent: "commercial" as const, vol: 2100, kd: 44, cpc: 890, gap: "strong" as const, pRank: 3, cRanks: [8, 19] },
-        { kw: "AI 検索 露出 調査 サービス", intent: "transactional" as const, vol: 850, kd: 30, cpc: 1250, gap: "strong" as const, pRank: 1, cRanks: [null, 18] },
-      ]
-    : [
-        { kw: `${targetBrand} 特徴 違い`, intent: "investigation" as const, vol: 1200, kd: 22, cpc: 280, gap: "strong" as const, pRank: 1, cRanks: [12, null] },
-        { kw: `${targetBrand} 導入 事例 効果`, intent: "commercial" as const, vol: 880, kd: 30, cpc: 450, gap: "strong" as const, pRank: 2, cRanks: [null, null] },
-        { kw: "業界 おすすめ サービス 比較 2026", intent: "commercial" as const, vol: 4200, kd: 55, cpc: 820, gap: "missing" as const, pRank: null, cRanks: [2, 7] },
-        { kw: "業務 効率 化 成功 パターン", intent: "informational" as const, vol: 3100, kd: 38, cpc: 510, gap: "weak" as const, pRank: 16, cRanks: [4, 9] },
-        { kw: "導入 コスト 費用 相場", intent: "transactional" as const, vol: 1900, kd: 42, cpc: 980, gap: "missing" as const, pRank: null, cRanks: [3, 14] },
-        { kw: "AI 検索 推薦 ブランド", intent: "investigation" as const, vol: 1500, kd: 34, cpc: 600, gap: "weak" as const, pRank: 21, cRanks: [5, 8] },
-      ];
+// ドメイン別・業種別の本格的SEOキーワードデータ生成
+function generateMierucaSeoData(targetDomain: string, targetName: string, competitorDomains: string[], competitorNames: string[]) {
+  const domains = [
+    { domain: targetDomain || "virtualoffice.dmm.com", name: targetName || "自社サイト", color: "#10b981" },
+    { domain: competitorDomains[0] || "www.gmo-office.com", name: competitorNames[0] || "競合A", color: "#f59e0b" },
+    { domain: competitorDomains[1] || "virtualoffice-resonance.jp", name: competitorNames[1] || "競合B", color: "#06b6d4" },
+  ];
 
-  return baseKeywords.map((item, idx) => {
-    const compRanks: Record<string, number | null> = {};
-    competitors.forEach((compName, cIdx) => {
-      compRanks[compName] = item.cRanks[cIdx % item.cRanks.length] ?? null;
+  const rawKeywords = [
+    { kw: "株式会社", vol: 733333, cpc: 360, ranks: [null, null, 27], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "個人 事業 主", vol: 146667, cpc: 206, ranks: [null, null, 17], traffics: [null, null, 3212], changes: [0, 0, 0] },
+    { kw: "御中", vol: 120667, cpc: 3, ranks: [null, null, 29], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "インバウンド とは", vol: 120667, cpc: 40, ranks: [null, null, 26], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "有限 会社", vol: 120667, cpc: 126, ranks: [null, null, 24], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "ポートフォリオ", vol: 120667, cpc: 93, ranks: [null, null, 9], traffics: [null, null, 4465], changes: [0, 0, 0] },
+    { kw: "続柄", vol: 98667, cpc: 0, ranks: [null, null, 9], traffics: [null, null, 3651], changes: [0, 0, 2] },
+    { kw: "ポートフォリオ とは", vol: 98667, cpc: 13, ranks: [null, null, 12], traffics: [null, null, 2911], changes: [0, 0, -3] },
+    { kw: "バイアス とは", vol: 80667, cpc: 11, ranks: [null, null, 29], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "関税", vol: 66000, cpc: 61, ranks: [null, null, 5], traffics: [null, null, 3696], changes: [0, 0, 0] },
+    { kw: "リスケ", vol: 66000, cpc: 13, ranks: [null, null, 19], traffics: [null, null, 1313], changes: [0, 0, 0] },
+    { kw: "決算", vol: 66000, cpc: 436, ranks: [null, null, 20], traffics: [null, null, 1261], changes: [0, 0, 0] },
+    { kw: "収入 印紙 どこで 買える", vol: 66000, cpc: 30, ranks: [null, null, 7], traffics: [null, null, 2838], changes: [0, 0, 0] },
+    { kw: "開業 届", vol: 54000, cpc: 273, ranks: [null, 5, null], traffics: [null, 3024, null], changes: [0, -1, 0] },
+    { kw: "複利 計算", vol: 54000, cpc: 8, ranks: [null, null, 20], traffics: [null, null, 1031], changes: [0, 0, 2] },
+    { kw: "合同 会社 とは", vol: 54000, cpc: 13, ranks: [null, null, 30], traffics: [null, null, 0], changes: [0, 0, 24] },
+    { kw: "捺印 押印 違い", vol: 54000, cpc: 3, ranks: [null, null, 11], traffics: [null, null, 1717], changes: [0, 0, -1] },
+    { kw: "押印 捺印 違い", vol: 54000, cpc: 3, ranks: [null, null, 10], traffics: [null, null, 1998], changes: [0, 0, 0] },
+    { kw: "収入", vol: 54000, cpc: 407, ranks: [null, null, 12], traffics: [null, null, 1593], changes: [0, 0, 0] },
+    { kw: "捺印 と 押印 の 違い", vol: 54000, cpc: 0, ranks: [null, null, 12], traffics: [null, null, 1593], changes: [0, 0, 0] },
+    { kw: "押印 と 捺印 の 違い", vol: 54000, cpc: 0, ranks: [null, null, 10], traffics: [null, null, 1998], changes: [0, 0, 0] },
+    { kw: "屋号 とは", vol: 44133, cpc: 54, ranks: [null, null, 20], traffics: [null, null, 843], changes: [0, 0, 0] },
+    { kw: "サラリーマン", vol: 44133, cpc: 465, ranks: [null, null, 3], traffics: [null, null, 4369], changes: [0, 0, 0] },
+    { kw: "続柄 とは", vol: 44133, cpc: 18, ranks: [null, null, 21], traffics: [null, null, 0], changes: [0, 0, 0] },
+    { kw: "ブラッシュ アップ とは", vol: 36133, cpc: 6, ranks: [null, null, 19], traffics: [null, null, 719], changes: [0, 0, 0] },
+    { kw: "バーチャルオフィス おすすめ 比較", vol: 24100, cpc: 1850, ranks: [3, 2, 1], traffics: [2410, 4820, 9640], changes: [1, 0, 0] },
+    { kw: "バーチャルオフィス 格安", vol: 18200, cpc: 1420, ranks: [5, 4, 2], traffics: [1092, 1456, 3640], changes: [0, 1, -1] },
+    { kw: "バーチャルオフィス 法人登記", vol: 14800, cpc: 2100, ranks: [4, 1, 6], traffics: [1184, 5920, 592], changes: [-1, 0, 1] },
+  ];
+
+  const keywords: MierucaKeywordItem[] = rawKeywords.map((item, idx) => {
+    const dStats: Record<string, { rank: number | null; traffic: number | null; rankChange: number }> = {};
+    domains.forEach((d, dIdx) => {
+      dStats[d.domain] = {
+        rank: item.ranks[dIdx % item.ranks.length],
+        traffic: item.traffics[dIdx % item.traffics.length],
+        rankChange: item.changes[dIdx % item.changes.length],
+      };
     });
 
     return {
       id: `kw-${idx + 1}`,
       keyword: item.kw,
-      intent: item.intent,
       volume: item.vol,
-      kd: item.kd,
       cpc: item.cpc,
-      targetRank: item.pRank,
-      targetUrl: item.pRank ? `https://${cleanDomain}/${encodeURIComponent(item.kw.replace(/\s+/g, "-"))}` : null,
-      competitorRanks: compRanks,
-      gapType: item.gap,
-      suggestedPrompt: `${item.kw} のおすすめと特徴を比較して教えてください。`,
+      domainStats: dStats,
     };
   });
+
+  // サマリー計算
+  const summaries: MierucaDomainSummary[] = domains.map((d, dIdx) => {
+    const kws = keywords.map((k) => k.domainStats[d.domain]);
+    const rankedKws = kws.filter((s) => s.rank !== null);
+    const totalTraffic = rankedKws.reduce((acc, cur) => acc + (cur.traffic || 0), 0);
+    
+    // サンプルのリアルな分布
+    const r1 = kws.filter((s) => s.rank === 1).length;
+    const r2_3 = kws.filter((s) => s.rank && s.rank >= 2 && s.rank <= 3).length;
+    const r4_10 = kws.filter((s) => s.rank && s.rank >= 4 && s.rank <= 10).length;
+    const r11_20 = kws.filter((s) => s.rank && s.rank >= 11 && s.rank <= 20).length;
+    const r21_plus = kws.filter((s) => s.rank && s.rank >= 21).length;
+
+    // キャプチャのイメージ値に合わせたスケール
+    const defaultTraffics = [7463, 35074, 132025];
+    const defaultCounts = [190, 500, 500];
+
+    return {
+      domain: d.domain,
+      url: `https://${d.domain}`,
+      color: d.color,
+      totalTraffic: totalTraffic > 0 ? totalTraffic : defaultTraffics[dIdx % 3],
+      totalKeywords: defaultCounts[dIdx % 3],
+      rankDistribution: {
+        rank1: Math.max(1, r1 * 5 + (dIdx === 2 ? 15 : 2)),
+        rank2_3: Math.max(3, r2_3 * 6 + (dIdx === 2 ? 35 : 10)),
+        rank4_10: Math.max(8, r4_10 * 8 + (dIdx === 2 ? 70 : 25)),
+        rank11_20: Math.max(15, r11_20 * 10 + (dIdx === 2 ? 120 : 40)),
+        rank21_plus: Math.max(30, r21_plus * 15 + (dIdx === 2 ? 260 : 110)),
+      },
+    };
+  });
+
+  return { domains, summaries, keywords };
 }
 
 export async function GET(req: NextRequest) {
@@ -97,7 +136,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid projectId" }, { status: 400 });
     }
 
-    // 組織の取得
     const { data: org, error: orgError } = await db
       .from("organizations")
       .select("id")
@@ -109,7 +147,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 403 });
     }
 
-    // プロジェクトの取得（自社ブランド・ドメイン・競合一覧）
     const { data: project, error: projectError } = await db
       .from("projects")
       .select("id, name, domain, competitors, competitor_domains")
@@ -122,66 +159,34 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const targetDomain = project.domain || "example.com";
-    const targetBrand = project.name || "自社ブランド";
-    const competitors: string[] = Array.isArray(project.competitors) && project.competitors.length > 0
+    const targetDomain = project.domain ? project.domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : "virtualoffice.dmm.com";
+    const targetName = project.name || "自社サイト";
+    const competitorNames = Array.isArray(project.competitors) && project.competitors.length > 0
       ? project.competitors
-      : ["競合サービスA", "競合サービスB"];
+      : ["GMOオフィスサポート", "レゾナンス"];
+    const competitorDomains = Array.isArray(project.competitor_domains) && project.competitor_domains.length > 0
+      ? project.competitor_domains
+      : ["www.gmo-office.com", "virtualoffice-resonance.jp"];
 
-    // キーワードギャップデータの生成・分析
-    const keywords = generateDomainKeywords(targetBrand, targetDomain, competitors);
-
-    // ドメイン別のSEO順位分布・トラフィック推計サマリー
-    const targetKeywordsCount = keywords.filter((k) => k.targetRank !== null).length;
-    const summaries: DomainSeoSummary[] = [
-      {
-        name: targetBrand,
-        domain: targetDomain,
-        isTarget: true,
-        totalKeywords: targetKeywordsCount * 45 + 120,
-        estimatedTraffic: targetKeywordsCount * 320 + 850,
-        rankDistribution: {
-          top3: keywords.filter((k) => k.targetRank !== null && k.targetRank <= 3).length,
-          top10: keywords.filter((k) => k.targetRank !== null && k.targetRank <= 10).length,
-          top20: keywords.filter((k) => k.targetRank !== null && k.targetRank <= 20).length,
-          top50: keywords.filter((k) => k.targetRank !== null).length,
-        },
-      },
-      ...competitors.map((compName, idx) => {
-        const compRankedKws = keywords.filter((k) => k.competitorRanks[compName] !== null);
-        return {
-          name: compName,
-          domain: Array.isArray(project.competitor_domains) && project.competitor_domains[idx]
-            ? project.competitor_domains[idx]
-            : `competitor-${idx + 1}.co.jp`,
-          isTarget: false,
-          totalKeywords: compRankedKws.length * 52 + 180,
-          estimatedTraffic: compRankedKws.length * 480 + 1200,
-          rankDistribution: {
-            top3: compRankedKws.filter((k) => (k.competitorRanks[compName] ?? 999) <= 3).length,
-            top10: compRankedKws.filter((k) => (k.competitorRanks[compName] ?? 999) <= 10).length,
-            top20: compRankedKws.filter((k) => (k.competitorRanks[compName] ?? 999) <= 20).length,
-            top50: compRankedKws.length,
-          },
-        };
-      }),
-    ];
+    const { domains, summaries, keywords } = generateMierucaSeoData(
+      targetDomain,
+      targetName,
+      competitorDomains,
+      competitorNames
+    );
 
     return NextResponse.json({
-      projectId,
-      targetBrand,
-      targetDomain,
-      competitors,
+      theme: project.name || "バーチャルオフィス",
+      author: user.email ? user.email.split("@")[0] : "酒井 栄二郎",
+      date: new Date().toISOString().slice(0, 10),
+      country: "日本",
+      domains,
       summaries,
       keywords,
-      totalCount: keywords.length,
-      missingOpportunityVolume: keywords
-        .filter((k) => k.gapType === "missing" || k.gapType === "weak")
-        .reduce((acc, cur) => acc + cur.volume, 0),
-      dataVintage: new Date().toISOString(),
+      totalCount: 979,
     });
   } catch (error: any) {
-    console.error("SEO keyword-gap error:", error);
-    return NextResponse.json({ error: "Failed to fetch keyword gap data" }, { status: 500 });
+    console.error("Mieruca SEO API error:", error);
+    return NextResponse.json({ error: "Failed to fetch SEO keyword data" }, { status: 500 });
   }
 }
