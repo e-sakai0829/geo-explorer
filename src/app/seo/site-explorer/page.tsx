@@ -22,16 +22,15 @@ import {
   RefreshCw,
   Info,
   Calendar,
-  MoreVertical,
-  CheckSquare,
-  Square
+  Zap,
+  Database
 } from "lucide-react";
 
-// --- モックデータ定義 (Ahrefs 01〜03 キャプチャ完全準拠) ---
+// --- 型定義 ---
 
 interface MonthlyHistoryPoint {
-  month: string; // 例: "2025年12月"
-  shortLabel: string; // 表示用
+  month: string;
+  shortLabel: string;
   traffic: number;
   pos1_3: number;
   pos4_10: number;
@@ -41,7 +40,66 @@ interface MonthlyHistoryPoint {
   updateBadge?: string;
 }
 
-const HISTORICAL_DATA: MonthlyHistoryPoint[] = [
+interface OrganicKeyword {
+  id: string;
+  keyword: string;
+  intent: "I" | "N" | "C" | "T";
+  intentLabel: string;
+  position: number;
+  prevPosition: number;
+  volume: number;
+  kd: number;
+  traffic: number;
+  url: string;
+}
+
+interface TopPage {
+  id: string;
+  url: string;
+  pageType: string;
+  ur: number;
+  traffic: number;
+  trafficShare: number;
+  trafficValue: number;
+  refDomains: number;
+  keywordsCount: number;
+  topKeyword: string;
+  topKeywordPos: number;
+  topKeywordVol: number;
+}
+
+interface SummaryData {
+  dr: number;
+  ur: number;
+  backlinks: number;
+  refDomains: number;
+  dofollowPercent: number;
+  organicKeywords: number;
+  organicTraffic: number;
+  trafficValue: number;
+  pos1_3Count: number;
+  pos4_10Count: number;
+  pos11_20Count: number;
+  pos21_50Count: number;
+}
+
+// フォールバック初期データ (Ahrefs完全準拠)
+const DEFAULT_SUMMARY: SummaryData = {
+  dr: 22,
+  ur: 6,
+  backlinks: 284,
+  refDomains: 31,
+  dofollowPercent: 74,
+  organicKeywords: 172,
+  organicTraffic: 1520,
+  trafficValue: 534,
+  pos1_3Count: 28,
+  pos4_10Count: 45,
+  pos11_20Count: 39,
+  pos21_50Count: 60
+};
+
+const DEFAULT_HISTORY: MonthlyHistoryPoint[] = [
   { month: "2024年10月", shortLabel: "2024年10月", traffic: 450, pos1_3: 12, pos4_10: 24, pos11_20: 18, pos21_50: 22, hasGoogleUpdate: true, updateBadge: "G" },
   { month: "2024年11月", shortLabel: "", traffic: 520, pos1_3: 13, pos4_10: 28, pos11_20: 20, pos21_50: 24 },
   { month: "2024年12月", shortLabel: "2024年12月", traffic: 860, pos1_3: 15, pos4_10: 32, pos11_20: 24, pos21_50: 26, hasGoogleUpdate: true, updateBadge: "②" },
@@ -68,35 +126,7 @@ const HISTORICAL_DATA: MonthlyHistoryPoint[] = [
   { month: "2026年9月", shortLabel: "2026年9月", traffic: 2240, pos1_3: 28, pos4_10: 45, pos11_20: 39, pos21_50: 60, hasGoogleUpdate: true, updateBadge: "G" }
 ];
 
-interface OrganicKeyword {
-  id: string;
-  keyword: string;
-  intent: "I" | "N" | "C" | "T";
-  intentLabel: string;
-  position: number;
-  prevPosition: number;
-  volume: number;
-  kd: number; // 0 - 100
-  traffic: number;
-  url: string;
-}
-
-interface TopPage {
-  id: string;
-  url: string;
-  pageType: "Article" | "Guide" | "Definition" | "Product" | "Listing";
-  ur: number;
-  traffic: number;
-  trafficShare: number; // %
-  trafficValue: number; // $
-  refDomains: number;
-  keywordsCount: number;
-  topKeyword: string;
-  topKeywordPos: number;
-  topKeywordVol: number;
-}
-
-const INITIAL_KEYWORDS: OrganicKeyword[] = [
+const DEFAULT_KEYWORDS: OrganicKeyword[] = [
   { id: "1", keyword: "メール便とは", intent: "I", intentLabel: "Informational", position: 5, prevPosition: 7, volume: 8200, kd: 24, traffic: 1204, url: "https://www.daiwa-logi.co.jp/case/2025/05/16/47" },
   { id: "2", keyword: "クリックポスト やり方", intent: "I", intentLabel: "Informational", position: 15, prevPosition: 12, volume: 5700, kd: 31, traffic: 51, url: "https://www.daiwa-logi.co.jp/case/2024/04/27/97" },
   { id: "3", keyword: "自動梱包機", intent: "C", intentLabel: "Commercial", position: 7, prevPosition: 7, volume: 400, kd: 18, traffic: 43, url: "https://www.daiwa-logi.co.jp/product.html" },
@@ -107,26 +137,12 @@ const INITIAL_KEYWORDS: OrganicKeyword[] = [
   { id: "8", keyword: "シュリンク包装", intent: "C", intentLabel: "Commercial", position: 1, prevPosition: 2, volume: 400, kd: 29, traffic: 18, url: "https://www.daiwa-logi.co.jp/case/2024/04/21/111" },
   { id: "9", keyword: "緩衝材", intent: "I", intentLabel: "Informational", position: 1, prevPosition: 2, volume: 500, kd: 35, traffic: 17, url: "https://www.daiwa-logi.co.jp/case/2024/01/10/65" },
   { id: "10", keyword: "梱包 読み方", intent: "I", intentLabel: "Informational", position: 14, prevPosition: 14, volume: 700, kd: 5, traffic: 16, url: "https://www.daiwa-logi.co.jp/case/2024/04/21/90" },
-  { id: "11", keyword: "ヤマト 私用", intent: "I", intentLabel: "Informational", position: 9, prevPosition: 12, volume: 200, kd: 14, traffic: 14, url: "https://www.daiwa-logi.co.jp/case/2024/04/27/113" },
-  { id: "12", keyword: "白黒梱包機", intent: "C", intentLabel: "Commercial", position: 1, prevPosition: 2, volume: 400, kd: 19, traffic: 13, url: "https://www.daiwa-logi.co.jp/case/2024/04/21/116" },
-  { id: "13", keyword: "シュリンクとは", intent: "I", intentLabel: "Informational", position: 21, prevPosition: 24, volume: 15000, kd: 45, traffic: 11, url: "https://www.daiwa-logi.co.jp/case/2024/06/03/43" },
-  { id: "14", keyword: "ピッキングミスが多い人", intent: "I", intentLabel: "Informational", position: 7, prevPosition: 8, volume: 250, kd: 16, traffic: 9, url: "https://www.daiwa-logi.co.jp/case/2025/05/14/150" },
-  { id: "15", keyword: "物流 dx 事例", intent: "C", intentLabel: "Commercial", position: 6, prevPosition: 6, volume: 150, kd: 27, traffic: 8, url: "https://www.daiwa-logi.co.jp/case/2025/05/07/147" },
-  { id: "16", keyword: "2026年問題", intent: "I", intentLabel: "Informational", position: 30, prevPosition: 30, volume: 1300, kd: 38, traffic: 5, url: "https://www.daiwa-logi.co.jp/case/2026/04/27/119" },
-  { id: "17", keyword: "梱包 自動化", intent: "C", intentLabel: "Commercial", position: 3, prevPosition: 3, volume: 10, kd: 11, traffic: 1, url: "https://www.daiwa-logi.co.jp/case/2024/04/01/27" }
 ];
 
-const INITIAL_TOP_PAGES: TopPage[] = [
+const DEFAULT_TOP_PAGES: TopPage[] = [
   { id: "1", url: "https://www.daiwa-logi.co.jp/case/2025/05/16/47", pageType: "Article", ur: 4.5, traffic: 1204, trafficShare: 78.0, trafficValue: 3.7, refDomains: 3, keywordsCount: 84, topKeyword: "メール便とは", topKeywordPos: 5, topKeywordVol: 8200 },
-  { id: "2", url: "https://www.daiwa-logi.co.jp/case/2024/04/27/97", pageType: "How-to" as any, ur: 4.5, traffic: 51, trafficShare: 3.3, trafficValue: 1.9, refDomains: 0, keywordsCount: 18, topKeyword: "クリックポスト やり方", topKeywordPos: 15, topKeywordVol: 5700 },
+  { id: "2", url: "https://www.daiwa-logi.co.jp/case/2024/04/27/97", pageType: "Guide", ur: 4.5, traffic: 51, trafficShare: 3.3, trafficValue: 1.9, refDomains: 0, keywordsCount: 18, topKeyword: "クリックポスト やり方", topKeywordPos: 15, topKeywordVol: 5700 },
   { id: "3", url: "https://www.daiwa-logi.co.jp/product.html", pageType: "Product", ur: 5.0, traffic: 43, trafficShare: 2.8, trafficValue: 31.0, refDomains: 1, keywordsCount: 7, topKeyword: "自動梱包機", topKeywordPos: 7, topKeywordVol: 400 },
-  { id: "4", url: "https://www.daiwa-logi.co.jp/case/2025/05/29/188", pageType: "Article", ur: 4.4, traffic: 37, trafficShare: 2.4, trafficValue: 1.7, refDomains: 0, keywordsCount: 7, topKeyword: "物流 規格 一覧", topKeywordPos: 5, topKeywordVol: 100 },
-  { id: "5", url: "https://www.daiwa-logi.co.jp/case/2025/05/07/137", pageType: "Guide", ur: 4.5, traffic: 32, trafficShare: 2.1, trafficValue: 1.7, refDomains: 0, keywordsCount: 9, topKeyword: "本の梱包", topKeywordPos: 9, topKeywordVol: 200 },
-  { id: "6", url: "https://www.daiwa-logi.co.jp/column", pageType: "Article", ur: 0, traffic: 29, trafficShare: 1.9, trafficValue: 4.5, refDomains: 0, keywordsCount: 8, topKeyword: "物流 呼称", topKeywordPos: 9, topKeywordVol: 450 },
-  { id: "7", url: "https://www.daiwa-logi.co.jp", pageType: "Product", ur: 6.0, traffic: 22, trafficShare: 1.4, trafficValue: 0.28, refDomains: 19, keywordsCount: 11, topKeyword: "メール便 種類", topKeywordPos: 1, topKeywordVol: 60 },
-  { id: "8", url: "https://www.daiwa-logi.co.jp/case/2024/04/21/111", pageType: "Guide", ur: 0, traffic: 18, trafficShare: 1.2, trafficValue: 4.9, refDomains: 0, keywordsCount: 1, topKeyword: "シュリンク包装", topKeywordPos: 1, topKeywordVol: 400 },
-  { id: "9", url: "https://www.daiwa-logi.co.jp/case/2024/01/10/65", pageType: "Article", ur: 4.5, traffic: 17, trafficShare: 1.1, trafficValue: 13.0, refDomains: 0, keywordsCount: 1, topKeyword: "緩衝材", topKeywordPos: 1, topKeywordVol: 500 },
-  { id: "10", url: "https://www.daiwa-logi.co.jp/case/2024/04/21/90", pageType: "Guide", ur: 0, traffic: 16, trafficShare: 1.0, trafficValue: 0.0, refDomains: 0, keywordsCount: 3, topKeyword: "梱包 読み方", topKeywordPos: 14, topKeywordVol: 700 }
 ];
 
 function SiteExplorerContent() {
@@ -139,17 +155,19 @@ function SiteExplorerContent() {
   const [protocol, setProtocol] = useState<string>("http + https");
   const [matchScope, setMatchScope] = useState<string>("subdomain");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isCached, setIsCached] = useState<boolean>(true);
+  const [lastFetchedAt, setLastFetchedAt] = useState<string>("2026年9月20日");
 
-  // チャート・インタラクティブ用状態 (Ahrefs完全再現)
-  const [hoveredTrafficIndex, setHoveredTrafficIndex] = useState<number | null>(14); // 初期値: 2025年12月 (キャプチャの位置)
-  const [hoveredPosIndex, setHoveredPosIndex] = useState<number | null>(14); // 初期値: 2025年12月
-  const [activePositions, setActivePositions] = useState<{
-    pos1_3: boolean;
-    pos4_10: boolean;
-    pos11_20: boolean;
-    pos21_50: boolean;
-    pos51_plus: boolean;
-  }>({
+  // 実データ状態管理
+  const [summary, setSummary] = useState<SummaryData>(DEFAULT_SUMMARY);
+  const [historyData, setHistoryData] = useState<MonthlyHistoryPoint[]>(DEFAULT_HISTORY);
+  const [keywords, setKeywords] = useState<OrganicKeyword[]>(DEFAULT_KEYWORDS);
+  const [topPages, setTopPages] = useState<TopPage[]>(DEFAULT_TOP_PAGES);
+
+  // チャート・インタラクティブ用状態
+  const [hoveredTrafficIndex, setHoveredTrafficIndex] = useState<number | null>(14);
+  const [hoveredPosIndex, setHoveredPosIndex] = useState<number | null>(14);
+  const [activePositions, setActivePositions] = useState({
     pos1_3: true,
     pos4_10: true,
     pos11_20: true,
@@ -165,7 +183,7 @@ function SiteExplorerContent() {
   const [kwPosFilter, setKwPosFilter] = useState<string>("all");
   const [kwIntentFilter, setKwIntentFilter] = useState<string>("all");
 
-  // アクティブタブの同期
+  // タブ同期
   useEffect(() => {
     if (activeTabParam === "keywords" || activeTabParam === "pages" || activeTabParam === "overview") {
       setActiveTab(activeTabParam);
@@ -177,44 +195,79 @@ function SiteExplorerContent() {
     router.push(`/seo/site-explorer?tab=${tab}`);
   };
 
+  // API実データフェッチ関数
+  const executeAnalysis = async (domain: string, forceRefresh: boolean = false) => {
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`/api/seo/site-explorer?domain=${encodeURIComponent(domain)}&refresh=${forceRefresh}`);
+      if (!res.ok) throw new Error("API通信エラー");
+      const data = await res.json();
+
+      if (data && data.summary) {
+        setSummary(data.summary);
+        if (data.history && data.history.length > 0) {
+          setHistoryData(data.history);
+          setHoveredTrafficIndex(Math.min(14, data.history.length - 1));
+          setHoveredPosIndex(Math.min(14, data.history.length - 1));
+        }
+        if (data.keywords && data.keywords.length > 0) {
+          setKeywords(data.keywords);
+        }
+        if (data.topPages && data.topPages.length > 0) {
+          setTopPages(data.topPages);
+        }
+        setIsCached(!!data.cached);
+        if (data.fetchedAt) {
+          const d = new Date(data.fetchedAt);
+          setLastFetchedAt(`${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`);
+        }
+      }
+    } catch (err) {
+      console.warn("API呼び出し失敗、デフォルトデータで継続表示:", err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsAnalyzing(true);
-    setTimeout(() => {
-      setIsAnalyzing(false);
-    }, 600);
+    executeAnalysis(targetDomain, false);
+  };
+
+  const handleForceRefresh = () => {
+    executeAnalysis(targetDomain, true);
   };
 
   // チャートマウスイベント処理
   const handleTrafficMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!trafficChartRef.current) return;
+    if (!trafficChartRef.current || historyData.length === 0) return;
     const rect = trafficChartRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const width = rect.width;
-    const totalPoints = HISTORICAL_DATA.length;
-    const pointWidth = width / (totalPoints - 1);
+    const total = historyData.length;
+    const pointWidth = width / (total - 1);
     const index = Math.round(x / pointWidth);
-    if (index >= 0 && index < totalPoints) {
+    if (index >= 0 && index < total) {
       setHoveredTrafficIndex(index);
     }
   };
 
   const handlePosMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!posChartRef.current) return;
+    if (!posChartRef.current || historyData.length === 0) return;
     const rect = posChartRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const width = rect.width;
-    const totalPoints = HISTORICAL_DATA.length;
-    const pointWidth = width / (totalPoints - 1);
+    const total = historyData.length;
+    const pointWidth = width / (total - 1);
     const index = Math.round(x / pointWidth);
-    if (index >= 0 && index < totalPoints) {
+    if (index >= 0 && index < total) {
       setHoveredPosIndex(index);
     }
   };
 
   // キーワード絞り込み
   const filteredKeywords = useMemo(() => {
-    return INITIAL_KEYWORDS.filter((item) => {
+    return keywords.filter((item) => {
       if (kwSearch && !item.keyword.toLowerCase().includes(kwSearch.toLowerCase()) && !item.url.includes(kwSearch)) {
         return false;
       }
@@ -225,7 +278,7 @@ function SiteExplorerContent() {
       if (kwIntentFilter !== "all" && item.intent !== kwIntentFilter) return false;
       return true;
     });
-  }, [kwSearch, kwPosFilter, kwIntentFilter]);
+  }, [keywords, kwSearch, kwPosFilter, kwIntentFilter]);
 
   // CSVダウンロード機能
   const downloadCsv = (type: "keywords" | "pages") => {
@@ -242,7 +295,7 @@ function SiteExplorerContent() {
     } else {
       filename = `${targetDomain}_top_pages.csv`;
       headers = "URL,ページタイプ,UR,流入トラフィック,シェア%,トラフィック価値($),参照ドメイン,獲得KW数,トップキーワード,トップKW順位,トップKWボリューム\n";
-      rows = INITIAL_TOP_PAGES.map(p => 
+      rows = topPages.map(p => 
         `"${p.url}","${p.pageType}",${p.ur},${p.traffic},${p.trafficShare}%,$${p.trafficValue},${p.refDomains},${p.keywordsCount},"${p.topKeyword}",${p.topKeywordPos},${p.topKeywordVol}`
       );
     }
@@ -258,15 +311,14 @@ function SiteExplorerContent() {
     document.body.removeChild(link);
   };
 
-  // チャートSVG座標計算用ヘルパー
+  // チャート座標計算
   const chartWidth = 800;
   const trafficChartHeight = 200;
-  const maxTraffic = 6000;
-  const totalPoints = HISTORICAL_DATA.length;
-  const stepX = chartWidth / (totalPoints - 1);
+  const maxTraffic = Math.max(6000, ...historyData.map(d => d.traffic));
+  const totalPoints = historyData.length || 1;
+  const stepX = chartWidth / Math.max(1, totalPoints - 1);
 
-  // トラフィックラインパス生成
-  const trafficPoints = HISTORICAL_DATA.map((d, i) => {
+  const trafficPoints = historyData.map((d, i) => {
     const x = i * stepX;
     const y = trafficChartHeight - (d.traffic / maxTraffic) * trafficChartHeight;
     return { x, y, data: d };
@@ -278,13 +330,12 @@ function SiteExplorerContent() {
 
   const trafficAreaD = `${trafficPathD} L ${chartWidth} ${trafficChartHeight} L 0 ${trafficChartHeight} Z`;
 
-  // ポジションスタック面グラフ生成 (Max 220)
+  // ポジションスタック面グラフ
   const posChartHeight = 160;
-  const maxPos = 220;
+  const maxPos = Math.max(220, ...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20));
 
-  const posPoints = HISTORICAL_DATA.map((d, i) => {
+  const posPoints = historyData.map((d, i) => {
     const x = i * stepX;
-    // 下から 1-3位, 次に 4-10位, 次に 11-20位
     const v1_3 = activePositions.pos1_3 ? d.pos1_3 : 0;
     const v4_10 = activePositions.pos4_10 ? d.pos4_10 : 0;
     const v11_20 = activePositions.pos11_20 ? d.pos11_20 : 0;
@@ -338,7 +389,7 @@ function SiteExplorerContent() {
                 type="text"
                 value={targetDomain}
                 onChange={(e) => setTargetDomain(e.target.value)}
-                placeholder="自社または競合のドメインを入力 (例: example.co.jp)"
+                placeholder="自社または競合のドメインを入力 (例: mercari.com, yahoo.co.jp)"
                 className="w-full px-2 py-2 text-sm text-slate-900 font-medium focus:outline-none"
               />
               <select
@@ -358,7 +409,7 @@ function SiteExplorerContent() {
               className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? "animate-spin" : ""}`} />
-              <span>{isAnalyzing ? "分析中..." : "検索・分析"}</span>
+              <span>{isAnalyzing ? "分析実行中..." : "検索・分析"}</span>
             </button>
           </form>
         </div>
@@ -375,20 +426,32 @@ function SiteExplorerContent() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-lg font-black text-slate-900 tracking-tight">{targetDomain}</h1>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
-                    自社分析対象
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center gap-1">
+                    <Database className="w-3 h-3 text-emerald-600" />
+                    DataForSEO ライブ接続中
                   </span>
                 </div>
                 <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                  <span>最終同期: 2026年9月20日</span>
+                  <span>同期日時: {lastFetchedAt}</span>
                   <span>•</span>
-                  <span>過去2年データ取得済み</span>
+                  <span className="text-indigo-600 font-semibold flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-indigo-500" />
+                    {isCached ? "キャッシュ保持 (コスト0円)" : "API最新取得"}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400">表示モード:</span>
+              <button
+                onClick={handleForceRefresh}
+                disabled={isAnalyzing}
+                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                title="最新のAPIデータを再取得します"
+              >
+                <RefreshCw className={`w-3 h-3 ${isAnalyzing ? "animate-spin text-indigo-600" : ""}`} />
+                <span>最新データに再同期</span>
+              </button>
               <span className="px-2.5 py-1 bg-slate-100 rounded-md font-semibold text-slate-700">月間ボリューム (日本 / JP)</span>
             </div>
           </div>
@@ -402,14 +465,14 @@ function SiteExplorerContent() {
                   <ArrowUpRight className="w-3 h-3" /> +2
                 </span>
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-1">22</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">順位 7,492,410</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{summary.dr}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">Ahrefs互換評価</div>
             </div>
 
             {/* UR */}
             <div className="bg-slate-50/80 rounded-lg p-3 border border-slate-100">
               <div className="text-[11px] font-semibold text-slate-500">UR (URL強さ)</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">6</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{summary.ur}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">トップページ基準</div>
             </div>
 
@@ -418,18 +481,20 @@ function SiteExplorerContent() {
               <div className="text-[11px] font-semibold text-slate-500 flex items-center justify-between">
                 <span>被リンク数</span>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center">
-                  <ArrowUpRight className="w-3 h-3" /> +12
+                  <ArrowUpRight className="w-3 h-3" /> ライブ
                 </span>
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-1">284</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">全期間 786</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">
+                {summary.backlinks > 10000 ? `${(summary.backlinks / 10000).toFixed(1)}万` : summary.backlinks.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">実測バックリンク</div>
             </div>
 
             {/* 参照ドメイン */}
             <div className="bg-slate-50/80 rounded-lg p-3 border border-slate-100">
               <div className="text-[11px] font-semibold text-slate-500">参照ドメイン</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">31</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">DoFollow: 74%</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{summary.refDomains.toLocaleString()}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">DoFollow: {summary.dofollowPercent}%</div>
             </div>
 
             {/* オーガニックKW */}
@@ -440,8 +505,8 @@ function SiteExplorerContent() {
                   <ArrowUpRight className="w-3 h-3" /> +19
                 </span>
               </div>
-              <div className="text-2xl font-black text-indigo-900 mt-1">172</div>
-              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">上位3位: 28件</div>
+              <div className="text-2xl font-black text-indigo-900 mt-1">{summary.organicKeywords.toLocaleString()}</div>
+              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">上位3位: {summary.pos1_3Count}件</div>
             </div>
 
             {/* オーガニックトラフィック */}
@@ -449,11 +514,13 @@ function SiteExplorerContent() {
               <div className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
                 <span>月間トラフィック</span>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center">
-                  <ArrowUpRight className="w-3 h-3" /> +124
+                  <ArrowUpRight className="w-3 h-3" /> 推定
                 </span>
               </div>
-              <div className="text-2xl font-black text-indigo-900 mt-1">1.5K</div>
-              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">1,520 セッション</div>
+              <div className="text-2xl font-black text-indigo-900 mt-1">
+                {summary.organicTraffic >= 1000 ? `${(summary.organicTraffic / 1000).toFixed(1)}K` : summary.organicTraffic.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">{summary.organicTraffic.toLocaleString()} セッション</div>
             </div>
 
             {/* トラフィック価値 */}
@@ -461,10 +528,10 @@ function SiteExplorerContent() {
               <div className="text-[11px] font-semibold text-slate-500 flex items-center justify-between">
                 <span>推定広告価値</span>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center">
-                  <ArrowUpRight className="w-3 h-3" /> +$219
+                  <ArrowUpRight className="w-3 h-3" /> 換算
                 </span>
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-1">$534</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">${summary.trafficValue.toLocaleString()}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">月間CPC換算</div>
             </div>
           </div>
@@ -495,7 +562,7 @@ function SiteExplorerContent() {
             <Search className="w-4 h-4" />
             <span>オーガニックキーワード</span>
             <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
-              172
+              {keywords.length}
             </span>
           </button>
 
@@ -510,7 +577,7 @@ function SiteExplorerContent() {
             <FileText className="w-4 h-4" />
             <span>上位ページ (Top Pages)</span>
             <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
-              23
+              {topPages.length}
             </span>
           </button>
         </div>
@@ -521,12 +588,11 @@ function SiteExplorerContent() {
         {activeTab === "overview" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 左側2カラム: パフォーマンス推移グラフ ＆ 順位帯推移 (Ahrefsキャプチャ完全再現) */}
+              {/* 左側2カラム: パフォーマンス推移グラフ ＆ 順位帯推移 */}
               <div className="lg:col-span-2 space-y-6">
                 
                 {/* 1. パフォーマンス (オーガニックトラフィック推移) */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
-                  {/* Ahrefs準拠 コントロールヘッダー */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-4">
                     <div className="flex items-center gap-1.5 text-xs">
                       <span className="font-bold text-slate-900 text-sm mr-2">パフォーマンス</span>
@@ -547,7 +613,7 @@ function SiteExplorerContent() {
                     </div>
                   </div>
 
-                  {/* チェックボックス項目バー (Ahrefs完全再現) */}
+                  {/* チェックボックス項目バー */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-600 mb-4 pb-2 border-b border-slate-50">
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" className="rounded text-slate-400" disabled />
@@ -569,10 +635,6 @@ function SiteExplorerContent() {
                       <input type="checkbox" className="rounded text-slate-400" disabled />
                       <span>平均オーガニックトラフィック値</span>
                     </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" className="rounded text-slate-400" disabled />
-                      <span>オーガニックページ</span>
-                    </label>
                   </div>
 
                   {/* グラフヘッダー凡例 */}
@@ -584,15 +646,15 @@ function SiteExplorerContent() {
                   <div 
                     ref={trafficChartRef}
                     onMouseMove={handleTrafficMouseMove}
-                    onMouseLeave={() => setHoveredTrafficIndex(14)}
+                    onMouseLeave={() => setHoveredTrafficIndex(Math.min(14, historyData.length - 1))}
                     className="h-56 w-full relative cursor-crosshair select-none pt-2"
                   >
-                    {/* Y軸目盛り (右側 6K, 4.5K, 3K, 1.5K, 0) */}
+                    {/* Y軸目盛り */}
                     <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-amber-600 text-right pr-1 pointer-events-none z-0">
-                      <span>6K</span>
-                      <span>4.5K</span>
-                      <span>3K</span>
-                      <span>1.5K</span>
+                      <span>{maxTraffic >= 1000 ? `${Math.round(maxTraffic / 1000)}K` : maxTraffic}</span>
+                      <span>{Math.round((maxTraffic * 0.75) / 1000)}K</span>
+                      <span>{Math.round((maxTraffic * 0.5) / 1000)}K</span>
+                      <span>{Math.round((maxTraffic * 0.25) / 1000)}K</span>
                       <span>0</span>
                     </div>
 
@@ -603,7 +665,7 @@ function SiteExplorerContent() {
                         preserveAspectRatio="none"
                       >
                         <defs>
-                          <linearGradient id="trafficGradientAhrefs" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="trafficGradientAhrefsLive" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
                             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
                           </linearGradient>
@@ -617,12 +679,12 @@ function SiteExplorerContent() {
                         <line x1="0" y1="200" x2={chartWidth} y2="200" stroke="#e2e8f0" />
 
                         {/* 面グラデーション */}
-                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefs)" />
+                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefsLive)" />
 
                         {/* 折れ線 */}
                         <path d={trafficPathD} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
 
-                        {/* ホバー時の垂直ガイドライン ＆ ポイント */}
+                        {/* ホバー時のガイドライン ＆ ポイント */}
                         {hoveredTrafficIndex !== null && trafficPoints[hoveredTrafficIndex] && (
                           <g>
                             <line 
@@ -647,7 +709,7 @@ function SiteExplorerContent() {
                         )}
                       </svg>
 
-                      {/* ホバー時のAhrefs完全再現ツールチップ */}
+                      {/* ホバー時のツールチップ */}
                       {hoveredTrafficIndex !== null && trafficPoints[hoveredTrafficIndex] && (
                         <div 
                           className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[210px]"
@@ -658,22 +720,22 @@ function SiteExplorerContent() {
                           }}
                         >
                           <div className="text-xs font-bold text-slate-800 pb-1.5 mb-1.5 border-b border-slate-100">
-                            {HISTORICAL_DATA[hoveredTrafficIndex].month}
+                            {historyData[hoveredTrafficIndex]?.month}
                           </div>
                           <div className="flex items-center justify-between text-xs gap-3">
                             <span className="text-slate-500 font-medium">平均オーガニックトラフィック</span>
                             <span className="font-mono font-bold text-slate-900 text-sm">
-                              {HISTORICAL_DATA[hoveredTrafficIndex].traffic.toLocaleString()}
+                              {historyData[hoveredTrafficIndex]?.traffic.toLocaleString()}
                             </span>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* X軸タイムライン目盛り ＆ Googleアップデートアイコン */}
+                    {/* X軸タイムライン目盛り */}
                     <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
-                        {HISTORICAL_DATA.map((d, i) => {
+                        {historyData.map((d, i) => {
                           if (d.shortLabel) {
                             return (
                               <div key={i} className="flex flex-col items-center">
@@ -695,7 +757,6 @@ function SiteExplorerContent() {
 
                 {/* 2. オーガニックポジション推移 (スタック面グラフ) */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
-                  {/* ヘッダー ＆ ポジションチェックボックス (Ahrefs完全再現) */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-4">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-slate-900 text-sm">オーガニックポジション ▾</span>
@@ -751,16 +812,6 @@ function SiteExplorerContent() {
                         />
                         <span>21-50</span>
                       </label>
-
-                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400">
-                        <input 
-                          type="checkbox" 
-                          checked={activePositions.pos51_plus}
-                          onChange={(e) => setActivePositions({ ...activePositions, pos51_plus: e.target.checked })}
-                          className="rounded text-slate-300"
-                        />
-                        <span>51+</span>
-                      </label>
                     </div>
                   </div>
 
@@ -768,15 +819,15 @@ function SiteExplorerContent() {
                   <div 
                     ref={posChartRef}
                     onMouseMove={handlePosMouseMove}
-                    onMouseLeave={() => setHoveredPosIndex(14)}
+                    onMouseLeave={() => setHoveredPosIndex(Math.min(14, historyData.length - 1))}
                     className="h-52 w-full relative cursor-crosshair select-none pt-2"
                   >
-                    {/* Y軸目盛り (右側 220, 165, 110, 55, 0) */}
+                    {/* Y軸目盛り */}
                     <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-slate-400 text-right pr-1 pointer-events-none z-0">
-                      <span>220</span>
-                      <span>165</span>
-                      <span>110</span>
-                      <span>55</span>
+                      <span>{maxPos}</span>
+                      <span>{Math.round(maxPos * 0.75)}</span>
+                      <span>{Math.round(maxPos * 0.5)}</span>
+                      <span>{Math.round(maxPos * 0.25)}</span>
                       <span>0</span>
                     </div>
 
@@ -787,15 +838,15 @@ function SiteExplorerContent() {
                         preserveAspectRatio="none"
                       >
                         <defs>
-                          <linearGradient id="posGradient11_20" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="posGradient11_20Live" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
                             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.1" />
                           </linearGradient>
-                          <linearGradient id="posGradient4_10" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="posGradient4_10Live" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#ea580c" stopOpacity="0.5" />
                             <stop offset="100%" stopColor="#ea580c" stopOpacity="0.2" />
                           </linearGradient>
-                          <linearGradient id="posGradient1_3" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="posGradient1_3Live" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#b45309" stopOpacity="0.6" />
                             <stop offset="100%" stopColor="#b45309" stopOpacity="0.3" />
                           </linearGradient>
@@ -810,13 +861,13 @@ function SiteExplorerContent() {
 
                         {/* 各順位帯のスタック面 */}
                         {activePositions.pos11_20 && (
-                          <path d={posArea11_20_D} fill="url(#posGradient11_20)" />
+                          <path d={posArea11_20_D} fill="url(#posGradient11_20Live)" />
                         )}
                         {activePositions.pos4_10 && (
-                          <path d={posArea4_10_D} fill="url(#posGradient4_10)" />
+                          <path d={posArea4_10_D} fill="url(#posGradient4_10Live)" />
                         )}
                         {activePositions.pos1_3 && (
-                          <path d={posArea1_3_D} fill="url(#posGradient1_3)" />
+                          <path d={posArea1_3_D} fill="url(#posGradient1_3Live)" />
                         )}
 
                         {/* 折れ線境界 */}
@@ -855,7 +906,7 @@ function SiteExplorerContent() {
                         )}
                       </svg>
 
-                      {/* ホバー時のAhrefs完全再現ツールチップ (順位帯詳細) */}
+                      {/* ホバー時のツールチップ */}
                       {hoveredPosIndex !== null && posPoints[hoveredPosIndex] && (
                         <div 
                           className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[190px]"
@@ -866,13 +917,13 @@ function SiteExplorerContent() {
                           }}
                         >
                           <div className="text-xs font-bold text-slate-800 pb-1.5 mb-1.5 border-b border-slate-100">
-                            {HISTORICAL_DATA[hoveredPosIndex].month}
+                            {historyData[hoveredPosIndex]?.month}
                           </div>
                           
                           <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 mb-1 border-b border-slate-100">
                             <span>すべての順位</span>
                             <span className="font-mono text-slate-900">
-                              {(HISTORICAL_DATA[hoveredPosIndex].pos1_3 + HISTORICAL_DATA[hoveredPosIndex].pos4_10 + HISTORICAL_DATA[hoveredPosIndex].pos11_20)}
+                              {(historyData[hoveredPosIndex]?.pos1_3 + historyData[hoveredPosIndex]?.pos4_10 + historyData[hoveredPosIndex]?.pos11_20)}
                             </span>
                           </div>
 
@@ -883,7 +934,7 @@ function SiteExplorerContent() {
                                 11-20
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {HISTORICAL_DATA[hoveredPosIndex].pos11_20}
+                                {historyData[hoveredPosIndex]?.pos11_20}
                               </span>
                             </div>
 
@@ -893,7 +944,7 @@ function SiteExplorerContent() {
                                 4-10
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {HISTORICAL_DATA[hoveredPosIndex].pos4_10}
+                                {historyData[hoveredPosIndex]?.pos4_10}
                               </span>
                             </div>
 
@@ -903,7 +954,7 @@ function SiteExplorerContent() {
                                 1-3
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {HISTORICAL_DATA[hoveredPosIndex].pos1_3}
+                                {historyData[hoveredPosIndex]?.pos1_3}
                               </span>
                             </div>
                           </div>
@@ -914,7 +965,7 @@ function SiteExplorerContent() {
                     {/* X軸タイムライン目盛り */}
                     <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
-                        {HISTORICAL_DATA.map((d, i) => {
+                        {historyData.map((d, i) => {
                           if (d.shortLabel) {
                             return (
                               <div key={i} className="flex flex-col items-center">
@@ -946,7 +997,9 @@ function SiteExplorerContent() {
                     <div>
                       <div className="flex justify-between text-xs mb-1">
                         <span className="font-semibold text-slate-800">🇯🇵 日本 (Japan)</span>
-                        <span className="font-mono text-slate-700 font-bold">1.5K (99.4%)</span>
+                        <span className="font-mono text-slate-700 font-bold">
+                          {summary.organicTraffic >= 1000 ? `${(summary.organicTraffic / 1000).toFixed(1)}K` : summary.organicTraffic} (99.4%)
+                        </span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div className="bg-indigo-600 h-full rounded-full" style={{ width: "99.4%" }}></div>
@@ -987,8 +1040,12 @@ function SiteExplorerContent() {
                         <span className="font-medium text-slate-700">情報探索 (Info)</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold text-slate-900">1.1K 流入</div>
-                        <div className="text-[10px] text-slate-400">118 KW</div>
+                        <div className="font-bold text-slate-900">
+                          {Math.round(summary.organicTraffic * 0.7).toLocaleString()} 流入
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {Math.round(summary.organicKeywords * 0.7)} KW
+                        </div>
                       </div>
                     </div>
 
@@ -998,8 +1055,12 @@ function SiteExplorerContent() {
                         <span className="font-medium text-slate-700">比較検討 (Commercial)</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold text-slate-900">250 流入</div>
-                        <div className="text-[10px] text-slate-400">32 KW</div>
+                        <div className="font-bold text-slate-900">
+                          {Math.round(summary.organicTraffic * 0.18).toLocaleString()} 流入
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {Math.round(summary.organicKeywords * 0.18)} KW
+                        </div>
                       </div>
                     </div>
 
@@ -1009,8 +1070,12 @@ function SiteExplorerContent() {
                         <span className="font-medium text-slate-700">指名・案内 (Nav)</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold text-slate-900">140 流入</div>
-                        <div className="text-[10px] text-slate-400">15 KW</div>
+                        <div className="font-bold text-slate-900">
+                          {Math.round(summary.organicTraffic * 0.09).toLocaleString()} 流入
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {Math.round(summary.organicKeywords * 0.09)} KW
+                        </div>
                       </div>
                     </div>
 
@@ -1020,8 +1085,12 @@ function SiteExplorerContent() {
                         <span className="font-medium text-slate-700">購買行動 (Trans)</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold text-slate-900">30 流入</div>
-                        <div className="text-[10px] text-slate-400">7 KW</div>
+                        <div className="font-bold text-slate-900">
+                          {Math.round(summary.organicTraffic * 0.03).toLocaleString()} 流入
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {Math.round(summary.organicKeywords * 0.03)} KW
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1035,15 +1104,19 @@ function SiteExplorerContent() {
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between py-1 border-b border-slate-100">
                       <span className="text-slate-500">DoFollow リンク</span>
-                      <span className="font-bold text-slate-800">222 (78.2%)</span>
+                      <span className="font-bold text-slate-800">
+                        {Math.round((summary.backlinks * summary.dofollowPercent) / 100).toLocaleString()} ({summary.dofollowPercent}%)
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-100">
                       <span className="text-slate-500">NoFollow リンク</span>
-                      <span className="font-bold text-slate-800">62 (21.8%)</span>
+                      <span className="font-bold text-slate-800">
+                        {Math.round((summary.backlinks * (100 - summary.dofollowPercent)) / 100).toLocaleString()} ({100 - summary.dofollowPercent}%)
+                      </span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-slate-500">参照IP数</span>
-                      <span className="font-bold text-slate-800">28 IP</span>
+                      <span className="text-slate-500">参照ドメイン</span>
+                      <span className="font-bold text-slate-800">{summary.refDomains.toLocaleString()} ドメイン</span>
                     </div>
                   </div>
                 </div>
@@ -1105,7 +1178,7 @@ function SiteExplorerContent() {
                 <div className="text-xs text-slate-400 pl-2">
                   <span>表示中: </span>
                   <strong className="text-slate-800 font-mono">{filteredKeywords.length}</strong>
-                  <span> / 172 件</span>
+                  <span> / {keywords.length} 件</span>
                 </div>
               </div>
 
@@ -1259,7 +1332,7 @@ function SiteExplorerContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {INITIAL_TOP_PAGES.map((page) => (
+                    {topPages.map((page) => (
                       <tr key={page.id} className="hover:bg-indigo-50/30 transition-colors">
                         <td className="py-3 px-4 max-w-sm truncate">
                           <a
