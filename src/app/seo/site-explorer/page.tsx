@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
@@ -20,10 +20,53 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
-  Info
+  Info,
+  Calendar,
+  MoreVertical,
+  CheckSquare,
+  Square
 } from "lucide-react";
 
 // --- モックデータ定義 (Ahrefs 01〜03 キャプチャ完全準拠) ---
+
+interface MonthlyHistoryPoint {
+  month: string; // 例: "2025年12月"
+  shortLabel: string; // 表示用
+  traffic: number;
+  pos1_3: number;
+  pos4_10: number;
+  pos11_20: number;
+  pos21_50: number;
+  hasGoogleUpdate?: boolean;
+  updateBadge?: string;
+}
+
+const HISTORICAL_DATA: MonthlyHistoryPoint[] = [
+  { month: "2024年10月", shortLabel: "2024年10月", traffic: 450, pos1_3: 12, pos4_10: 24, pos11_20: 18, pos21_50: 22, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2024年11月", shortLabel: "", traffic: 520, pos1_3: 13, pos4_10: 28, pos11_20: 20, pos21_50: 24 },
+  { month: "2024年12月", shortLabel: "2024年12月", traffic: 860, pos1_3: 15, pos4_10: 32, pos11_20: 24, pos21_50: 26, hasGoogleUpdate: true, updateBadge: "②" },
+  { month: "2025年1月", shortLabel: "", traffic: 640, pos1_3: 14, pos4_10: 30, pos11_20: 22, pos21_50: 25 },
+  { month: "2025年2月", shortLabel: "", traffic: 580, pos1_3: 15, pos4_10: 31, pos11_20: 23, pos21_50: 28 },
+  { month: "2025年3月", shortLabel: "2025年3月", traffic: 780, pos1_3: 18, pos4_10: 38, pos11_20: 25, pos21_50: 30, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2025年4月", shortLabel: "", traffic: 720, pos1_3: 17, pos4_10: 36, pos11_20: 26, pos21_50: 32 },
+  { month: "2025年5月", shortLabel: "", traffic: 690, pos1_3: 16, pos4_10: 35, pos11_20: 25, pos21_50: 31 },
+  { month: "2025年6月", shortLabel: "2025年6月", traffic: 1500, pos1_3: 24, pos4_10: 52, pos11_20: 38, pos21_50: 42, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2025年7月", shortLabel: "", traffic: 3900, pos1_3: 48, pos4_10: 110, pos11_20: 35, pos21_50: 45 },
+  { month: "2025年8月", shortLabel: "", traffic: 3850, pos1_3: 47, pos4_10: 108, pos11_20: 34, pos21_50: 44, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2025年9月", shortLabel: "2025年9月", traffic: 4300, pos1_3: 52, pos4_10: 118, pos11_20: 32, pos21_50: 41, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2025年10月", shortLabel: "", traffic: 4150, pos1_3: 50, pos4_10: 115, pos11_20: 30, pos21_50: 40 },
+  { month: "2025年11月", shortLabel: "", traffic: 4080, pos1_3: 49, pos4_10: 114, pos11_20: 28, pos21_50: 39 },
+  { month: "2025年12月", shortLabel: "2025年12月", traffic: 4016, pos1_3: 56, pos4_10: 125, pos11_20: 29, pos21_50: 38, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2026年1月", shortLabel: "", traffic: 4200, pos1_3: 58, pos4_10: 128, pos11_20: 31, pos21_50: 42 },
+  { month: "2026年2月", shortLabel: "", traffic: 4800, pos1_3: 62, pos4_10: 135, pos11_20: 33, pos21_50: 45 },
+  { month: "2026年3月", shortLabel: "2026年3月", traffic: 4100, pos1_3: 55, pos4_10: 122, pos11_20: 30, pos21_50: 40, hasGoogleUpdate: true, updateBadge: "②" },
+  { month: "2026年4月", shortLabel: "", traffic: 3200, pos1_3: 42, pos4_10: 95, pos11_20: 25, pos21_50: 38 },
+  { month: "2026年5月", shortLabel: "", traffic: 520, pos1_3: 12, pos4_10: 28, pos11_20: 15, pos21_50: 22, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2026年6月", shortLabel: "2026年6月", traffic: 560, pos1_3: 14, pos4_10: 30, pos11_20: 16, pos21_50: 24, hasGoogleUpdate: true, updateBadge: "G" },
+  { month: "2026年7月", shortLabel: "", traffic: 3600, pos1_3: 45, pos4_10: 105, pos11_20: 30, pos21_50: 40 },
+  { month: "2026年8月", shortLabel: "", traffic: 3550, pos1_3: 44, pos4_10: 102, pos11_20: 28, pos21_50: 38 },
+  { month: "2026年9月", shortLabel: "2026年9月", traffic: 2240, pos1_3: 28, pos4_10: 45, pos11_20: 39, pos21_50: 60, hasGoogleUpdate: true, updateBadge: "G" }
+];
 
 interface OrganicKeyword {
   id: string;
@@ -97,6 +140,26 @@ function SiteExplorerContent() {
   const [matchScope, setMatchScope] = useState<string>("subdomain");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
+  // チャート・インタラクティブ用状態 (Ahrefs完全再現)
+  const [hoveredTrafficIndex, setHoveredTrafficIndex] = useState<number | null>(14); // 初期値: 2025年12月 (キャプチャの位置)
+  const [hoveredPosIndex, setHoveredPosIndex] = useState<number | null>(14); // 初期値: 2025年12月
+  const [activePositions, setActivePositions] = useState<{
+    pos1_3: boolean;
+    pos4_10: boolean;
+    pos11_20: boolean;
+    pos21_50: boolean;
+    pos51_plus: boolean;
+  }>({
+    pos1_3: true,
+    pos4_10: true,
+    pos11_20: true,
+    pos21_50: false,
+    pos51_plus: false
+  });
+
+  const trafficChartRef = useRef<HTMLDivElement>(null);
+  const posChartRef = useRef<HTMLDivElement>(null);
+
   // フィルター
   const [kwSearch, setKwSearch] = useState<string>("");
   const [kwPosFilter, setKwPosFilter] = useState<string>("all");
@@ -120,6 +183,33 @@ function SiteExplorerContent() {
     setTimeout(() => {
       setIsAnalyzing(false);
     }, 600);
+  };
+
+  // チャートマウスイベント処理
+  const handleTrafficMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!trafficChartRef.current) return;
+    const rect = trafficChartRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    const totalPoints = HISTORICAL_DATA.length;
+    const pointWidth = width / (totalPoints - 1);
+    const index = Math.round(x / pointWidth);
+    if (index >= 0 && index < totalPoints) {
+      setHoveredTrafficIndex(index);
+    }
+  };
+
+  const handlePosMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!posChartRef.current) return;
+    const rect = posChartRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    const totalPoints = HISTORICAL_DATA.length;
+    const pointWidth = width / (totalPoints - 1);
+    const index = Math.round(x / pointWidth);
+    if (index >= 0 && index < totalPoints) {
+      setHoveredPosIndex(index);
+    }
   };
 
   // キーワード絞り込み
@@ -167,6 +257,58 @@ function SiteExplorerContent() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // チャートSVG座標計算用ヘルパー
+  const chartWidth = 800;
+  const trafficChartHeight = 200;
+  const maxTraffic = 6000;
+  const totalPoints = HISTORICAL_DATA.length;
+  const stepX = chartWidth / (totalPoints - 1);
+
+  // トラフィックラインパス生成
+  const trafficPoints = HISTORICAL_DATA.map((d, i) => {
+    const x = i * stepX;
+    const y = trafficChartHeight - (d.traffic / maxTraffic) * trafficChartHeight;
+    return { x, y, data: d };
+  });
+
+  const trafficPathD = trafficPoints.reduce((acc, pt, i) => {
+    return i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
+  }, "");
+
+  const trafficAreaD = `${trafficPathD} L ${chartWidth} ${trafficChartHeight} L 0 ${trafficChartHeight} Z`;
+
+  // ポジションスタック面グラフ生成 (Max 220)
+  const posChartHeight = 160;
+  const maxPos = 220;
+
+  const posPoints = HISTORICAL_DATA.map((d, i) => {
+    const x = i * stepX;
+    // 下から 1-3位, 次に 4-10位, 次に 11-20位
+    const v1_3 = activePositions.pos1_3 ? d.pos1_3 : 0;
+    const v4_10 = activePositions.pos4_10 ? d.pos4_10 : 0;
+    const v11_20 = activePositions.pos11_20 ? d.pos11_20 : 0;
+
+    const yBase = posChartHeight;
+    const y1_3 = posChartHeight - (v1_3 / maxPos) * posChartHeight;
+    const y4_10 = posChartHeight - ((v1_3 + v4_10) / maxPos) * posChartHeight;
+    const y11_20 = posChartHeight - ((v1_3 + v4_10 + v11_20) / maxPos) * posChartHeight;
+
+    return { x, yBase, y1_3, y4_10, y11_20, data: d };
+  });
+
+  const posArea11_20_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y11_20}`, "")
+    + ` L ${chartWidth} ${posChartHeight} L 0 ${posChartHeight} Z`;
+
+  const posArea4_10_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y4_10}`, "")
+    + ` L ${chartWidth} ${posChartHeight} L 0 ${posChartHeight} Z`;
+
+  const posArea1_3_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y1_3}`, "")
+    + ` L ${chartWidth} ${posChartHeight} L 0 ${posChartHeight} Z`;
+
+  const posLine11_20_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y11_20}`, "");
+  const posLine4_10_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y4_10}`, "");
+  const posLine1_3_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y1_3}`, "");
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
@@ -379,105 +521,415 @@ function SiteExplorerContent() {
         {activeTab === "overview" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 左側2カラム: パフォーマンス推移グラフ ＆ 順位帯推移 */}
+              {/* 左側2カラム: パフォーマンス推移グラフ ＆ 順位帯推移 (Ahrefsキャプチャ完全再現) */}
               <div className="lg:col-span-2 space-y-6">
-                {/* トラフィック推移波形 */}
+                
+                {/* 1. パフォーマンス (オーガニックトラフィック推移) */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <span>オーガニックトラフィック推移 (過去2年間)</span>
-                      </h2>
-                      <p className="text-xs text-slate-400">日次の推定検索流入セッション数の変動波形</p>
+                  {/* Ahrefs準拠 コントロールヘッダー */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-4">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="font-bold text-slate-900 text-sm mr-2">パフォーマンス</span>
+                      <button className="px-2.5 py-1 bg-slate-100 rounded text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors">指標</button>
+                      <button className="px-2.5 py-1 bg-slate-100 rounded text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors flex items-center gap-1">競合 ▾</button>
+                      <button className="px-2.5 py-1 bg-slate-100 rounded text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors flex items-center gap-1">ロケーション ▾</button>
+                      <button className="px-2.5 py-1 bg-slate-100 rounded text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors">年数</button>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 font-bold">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                        オーガニックトラフィック
-                      </span>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold cursor-pointer">
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        <span>過去 2 年間 ▾</span>
+                      </div>
+                      <div className="bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold cursor-pointer">
+                        <span>毎月 ▾</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* SVG波形グラフ */}
-                  <div className="h-48 w-full relative pt-4">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 500 120" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      {/* グリッド破線 */}
-                      <line x1="0" y1="30" x2="500" y2="30" stroke="#f1f5f9" strokeDasharray="3 3" />
-                      <line x1="0" y1="60" x2="500" y2="60" stroke="#f1f5f9" strokeDasharray="3 3" />
-                      <line x1="0" y1="90" x2="500" y2="90" stroke="#f1f5f9" strokeDasharray="3 3" />
-                      
-                      {/* 面 */}
-                      <path
-                        d="M 0 110 Q 70 105, 120 90 T 220 85 T 300 45 T 380 70 T 440 50 T 500 40 L 500 120 L 0 120 Z"
-                        fill="url(#trafficGradient)"
-                      />
-                      {/* 線 */}
-                      <path
-                        d="M 0 110 Q 70 105, 120 90 T 220 85 T 300 45 T 380 70 T 440 50 T 500 40"
-                        fill="none"
-                        stroke="#f59e0b"
-                        strokeWidth="2.5"
-                      />
-                      {/* ポイント */}
-                      <circle cx="300" cy="45" r="4" fill="#f59e0b" className="animate-pulse" />
-                      <circle cx="500" cy="40" r="4" fill="#f59e0b" />
-                    </svg>
-                    <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-mono">
-                      <span>2024年10月</span>
-                      <span>2025年4月</span>
-                      <span>2025年10月</span>
-                      <span>2026年4月</span>
-                      <span>現在 (2026年9月)</span>
+                  {/* チェックボックス項目バー (Ahrefs完全再現) */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-600 mb-4 pb-2 border-b border-slate-50">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-slate-400" disabled />
+                      <span>参照ドメイン</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-slate-400" disabled />
+                      <span>平均ドメイン評価</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-slate-400" disabled />
+                      <span>平均 URL 評価</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer font-bold text-amber-600">
+                      <input type="checkbox" defaultChecked className="rounded text-amber-500 focus:ring-amber-400" />
+                      <span>平均オーガニックトラフィック</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-slate-400" disabled />
+                      <span>平均オーガニックトラフィック値</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-slate-400" disabled />
+                      <span>オーガニックページ</span>
+                    </label>
+                  </div>
+
+                  {/* グラフヘッダー凡例 */}
+                  <div className="flex justify-end text-xs font-bold text-amber-600 mb-1">
+                    <span>平均オーガニックトラフィック</span>
+                  </div>
+
+                  {/* インタラクティブSVGグラフエリア */}
+                  <div 
+                    ref={trafficChartRef}
+                    onMouseMove={handleTrafficMouseMove}
+                    onMouseLeave={() => setHoveredTrafficIndex(14)}
+                    className="h-56 w-full relative cursor-crosshair select-none pt-2"
+                  >
+                    {/* Y軸目盛り (右側 6K, 4.5K, 3K, 1.5K, 0) */}
+                    <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-amber-600 text-right pr-1 pointer-events-none z-0">
+                      <span>6K</span>
+                      <span>4.5K</span>
+                      <span>3K</span>
+                      <span>1.5K</span>
+                      <span>0</span>
+                    </div>
+
+                    <div className="h-44 w-full pr-10 relative">
+                      <svg 
+                        className="w-full h-full overflow-visible" 
+                        viewBox={`0 0 ${chartWidth} ${trafficChartHeight}`} 
+                        preserveAspectRatio="none"
+                      >
+                        <defs>
+                          <linearGradient id="trafficGradientAhrefs" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+
+                        {/* 水平グリッドライン */}
+                        <line x1="0" y1="0" x2={chartWidth} y2="0" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="50" x2={chartWidth} y2="50" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="100" x2={chartWidth} y2="100" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="150" x2={chartWidth} y2="150" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="200" x2={chartWidth} y2="200" stroke="#e2e8f0" />
+
+                        {/* 面グラデーション */}
+                        <path d={trafficAreaD} fill="url(#trafficGradientAhrefs)" />
+
+                        {/* 折れ線 */}
+                        <path d={trafficPathD} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+
+                        {/* ホバー時の垂直ガイドライン ＆ ポイント */}
+                        {hoveredTrafficIndex !== null && trafficPoints[hoveredTrafficIndex] && (
+                          <g>
+                            <line 
+                              x1={trafficPoints[hoveredTrafficIndex].x} 
+                              y1={0} 
+                              x2={trafficPoints[hoveredTrafficIndex].x} 
+                              y2={trafficChartHeight} 
+                              stroke="#cbd5e1" 
+                              strokeWidth="1.5" 
+                              strokeDasharray="4 3" 
+                            />
+                            <circle 
+                              cx={trafficPoints[hoveredTrafficIndex].x} 
+                              cy={trafficPoints[hoveredTrafficIndex].y} 
+                              r="5" 
+                              fill="#f59e0b" 
+                              stroke="#ffffff" 
+                              strokeWidth="2.5" 
+                              className="filter drop-shadow-xs"
+                            />
+                          </g>
+                        )}
+                      </svg>
+
+                      {/* ホバー時のAhrefs完全再現ツールチップ */}
+                      {hoveredTrafficIndex !== null && trafficPoints[hoveredTrafficIndex] && (
+                        <div 
+                          className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[210px]"
+                          style={{
+                            left: `${Math.min(78, Math.max(12, (trafficPoints[hoveredTrafficIndex].x / chartWidth) * 100))}%`,
+                            top: `${Math.max(10, (trafficPoints[hoveredTrafficIndex].y / trafficChartHeight) * 100 - 35)}%`,
+                            transform: "translate(-50%, -50%)"
+                          }}
+                        >
+                          <div className="text-xs font-bold text-slate-800 pb-1.5 mb-1.5 border-b border-slate-100">
+                            {HISTORICAL_DATA[hoveredTrafficIndex].month}
+                          </div>
+                          <div className="flex items-center justify-between text-xs gap-3">
+                            <span className="text-slate-500 font-medium">平均オーガニックトラフィック</span>
+                            <span className="font-mono font-bold text-slate-900 text-sm">
+                              {HISTORICAL_DATA[hoveredTrafficIndex].traffic.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* X軸タイムライン目盛り ＆ Googleアップデートアイコン */}
+                    <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
+                        {HISTORICAL_DATA.map((d, i) => {
+                          if (d.shortLabel) {
+                            return (
+                              <div key={i} className="flex flex-col items-center">
+                                {d.hasGoogleUpdate && (
+                                  <div className="w-4 h-4 rounded-full border border-slate-300 bg-white text-[9px] font-bold text-slate-500 flex items-center justify-center mb-1 shadow-2xs">
+                                    {d.updateBadge}
+                                  </div>
+                                )}
+                                <span>{d.shortLabel}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 順位帯推移スタック */}
+                {/* 2. オーガニックポジション推移 (スタック面グラフ) */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">オーガニックポジション推移</h2>
-                      <p className="text-xs text-slate-400">獲得キーワードの順位帯別（1-3位、4-10位、11-20位など）の分布推移</p>
+                  {/* ヘッダー ＆ ポジションチェックボックス (Ahrefs完全再現) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-900 text-sm">オーガニックポジション ▾</span>
                     </div>
+
+                    {/* 順位帯フィルターチェックボックス */}
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-xs bg-amber-600"></span> 1-3位 (28)</span>
-                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-xs bg-amber-400"></span> 4-10位 (45)</span>
-                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-xs bg-amber-200"></span> 11-20位 (39)</span>
-                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-xs bg-slate-200"></span> 21-50位 (60)</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={activePositions.pos1_3}
+                          onChange={(e) => setActivePositions({ ...activePositions, pos1_3: e.target.checked })}
+                          className="rounded text-amber-700 focus:ring-amber-600"
+                        />
+                        <span className="font-bold text-amber-900 flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#b45309]"></span>
+                          1-3
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={activePositions.pos4_10}
+                          onChange={(e) => setActivePositions({ ...activePositions, pos4_10: e.target.checked })}
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="font-bold text-amber-800 flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#ea580c]"></span>
+                          4-10
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={activePositions.pos11_20}
+                          onChange={(e) => setActivePositions({ ...activePositions, pos11_20: e.target.checked })}
+                          className="rounded text-amber-400 focus:ring-amber-400"
+                        />
+                        <span className="font-bold text-amber-700 flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#f59e0b]"></span>
+                          11-20
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400">
+                        <input 
+                          type="checkbox" 
+                          checked={activePositions.pos21_50}
+                          onChange={(e) => setActivePositions({ ...activePositions, pos21_50: e.target.checked })}
+                          className="rounded text-slate-300"
+                        />
+                        <span>21-50</span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400">
+                        <input 
+                          type="checkbox" 
+                          checked={activePositions.pos51_plus}
+                          onChange={(e) => setActivePositions({ ...activePositions, pos51_plus: e.target.checked })}
+                          className="rounded text-slate-300"
+                        />
+                        <span>51+</span>
+                      </label>
                     </div>
                   </div>
 
-                  <div className="h-36 w-full relative pt-2">
-                    <svg className="w-full h-full" viewBox="0 0 500 100" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="posGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#d97706" stopOpacity="0.5" />
-                          <stop offset="100%" stopColor="#fde68a" stopOpacity="0.2" />
-                        </linearGradient>
-                      </defs>
-                      <path
-                        d="M 0 95 Q 100 85, 200 70 T 350 40 T 500 25 L 500 100 L 0 100 Z"
-                        fill="url(#posGradient)"
-                      />
-                      <path
-                        d="M 0 95 Q 100 85, 200 70 T 350 40 T 500 25"
-                        fill="none"
-                        stroke="#d97706"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                    <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-mono">
-                      <span>2024年10月</span>
-                      <span>2025年4月</span>
-                      <span>2025年10月</span>
-                      <span>2026年4月</span>
-                      <span>現在 (2026年9月)</span>
+                  {/* インタラクティブSVGスタック面グラフ */}
+                  <div 
+                    ref={posChartRef}
+                    onMouseMove={handlePosMouseMove}
+                    onMouseLeave={() => setHoveredPosIndex(14)}
+                    className="h-52 w-full relative cursor-crosshair select-none pt-2"
+                  >
+                    {/* Y軸目盛り (右側 220, 165, 110, 55, 0) */}
+                    <div className="absolute right-0 top-0 bottom-6 flex flex-col justify-between text-[11px] font-mono font-semibold text-slate-400 text-right pr-1 pointer-events-none z-0">
+                      <span>220</span>
+                      <span>165</span>
+                      <span>110</span>
+                      <span>55</span>
+                      <span>0</span>
+                    </div>
+
+                    <div className="h-40 w-full pr-10 relative">
+                      <svg 
+                        className="w-full h-full overflow-visible" 
+                        viewBox={`0 0 ${chartWidth} ${posChartHeight}`} 
+                        preserveAspectRatio="none"
+                      >
+                        <defs>
+                          <linearGradient id="posGradient11_20" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+                            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.1" />
+                          </linearGradient>
+                          <linearGradient id="posGradient4_10" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ea580c" stopOpacity="0.5" />
+                            <stop offset="100%" stopColor="#ea580c" stopOpacity="0.2" />
+                          </linearGradient>
+                          <linearGradient id="posGradient1_3" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#b45309" stopOpacity="0.6" />
+                            <stop offset="100%" stopColor="#b45309" stopOpacity="0.3" />
+                          </linearGradient>
+                        </defs>
+
+                        {/* 水平グリッドライン */}
+                        <line x1="0" y1="0" x2={chartWidth} y2="0" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="40" x2={chartWidth} y2="40" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="80" x2={chartWidth} y2="80" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="120" x2={chartWidth} y2="120" stroke="#f1f5f9" strokeDasharray="3 3" />
+                        <line x1="0" y1="160" x2={chartWidth} y2="160" stroke="#e2e8f0" />
+
+                        {/* 各順位帯のスタック面 */}
+                        {activePositions.pos11_20 && (
+                          <path d={posArea11_20_D} fill="url(#posGradient11_20)" />
+                        )}
+                        {activePositions.pos4_10 && (
+                          <path d={posArea4_10_D} fill="url(#posGradient4_10)" />
+                        )}
+                        {activePositions.pos1_3 && (
+                          <path d={posArea1_3_D} fill="url(#posGradient1_3)" />
+                        )}
+
+                        {/* 折れ線境界 */}
+                        {activePositions.pos11_20 && (
+                          <path d={posLine11_20_D} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinejoin="round" />
+                        )}
+                        {activePositions.pos4_10 && (
+                          <path d={posLine4_10_D} fill="none" stroke="#ea580c" strokeWidth="1.5" strokeLinejoin="round" />
+                        )}
+                        {activePositions.pos1_3 && (
+                          <path d={posLine1_3_D} fill="none" stroke="#b45309" strokeWidth="1.5" strokeLinejoin="round" />
+                        )}
+
+                        {/* ホバー時のガイドライン ＆ サークル */}
+                        {hoveredPosIndex !== null && posPoints[hoveredPosIndex] && (
+                          <g>
+                            <line 
+                              x1={posPoints[hoveredPosIndex].x} 
+                              y1={0} 
+                              x2={posPoints[hoveredPosIndex].x} 
+                              y2={posChartHeight} 
+                              stroke="#cbd5e1" 
+                              strokeWidth="1.5" 
+                              strokeDasharray="4 3" 
+                            />
+                            {activePositions.pos11_20 && (
+                              <circle cx={posPoints[hoveredPosIndex].x} cy={posPoints[hoveredPosIndex].y11_20} r="4" fill="#f59e0b" stroke="#ffffff" strokeWidth="2" />
+                            )}
+                            {activePositions.pos4_10 && (
+                              <circle cx={posPoints[hoveredPosIndex].x} cy={posPoints[hoveredPosIndex].y4_10} r="4" fill="#ea580c" stroke="#ffffff" strokeWidth="2" />
+                            )}
+                            {activePositions.pos1_3 && (
+                              <circle cx={posPoints[hoveredPosIndex].x} cy={posPoints[hoveredPosIndex].y1_3} r="4" fill="#b45309" stroke="#ffffff" strokeWidth="2" />
+                            )}
+                          </g>
+                        )}
+                      </svg>
+
+                      {/* ホバー時のAhrefs完全再現ツールチップ (順位帯詳細) */}
+                      {hoveredPosIndex !== null && posPoints[hoveredPosIndex] && (
+                        <div 
+                          className="absolute bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[190px]"
+                          style={{
+                            left: `${Math.min(78, Math.max(12, (posPoints[hoveredPosIndex].x / chartWidth) * 100))}%`,
+                            top: `${Math.max(10, (posPoints[hoveredPosIndex].y11_20 / posChartHeight) * 100 - 40)}%`,
+                            transform: "translate(-50%, -50%)"
+                          }}
+                        >
+                          <div className="text-xs font-bold text-slate-800 pb-1.5 mb-1.5 border-b border-slate-100">
+                            {HISTORICAL_DATA[hoveredPosIndex].month}
+                          </div>
+                          
+                          <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 mb-1 border-b border-slate-100">
+                            <span>すべての順位</span>
+                            <span className="font-mono text-slate-900">
+                              {(HISTORICAL_DATA[hoveredPosIndex].pos1_3 + HISTORICAL_DATA[hoveredPosIndex].pos4_10 + HISTORICAL_DATA[hoveredPosIndex].pos11_20)}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
+                                11-20
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {HISTORICAL_DATA[hoveredPosIndex].pos11_20}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-[#ea580c]"></span>
+                                4-10
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {HISTORICAL_DATA[hoveredPosIndex].pos4_10}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-[#b45309]"></span>
+                                1-3
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {HISTORICAL_DATA[hoveredPosIndex].pos1_3}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* X軸タイムライン目盛り */}
+                    <div className="relative w-full pr-10 mt-1.5 pt-2 border-t border-slate-200">
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
+                        {HISTORICAL_DATA.map((d, i) => {
+                          if (d.shortLabel) {
+                            return (
+                              <div key={i} className="flex flex-col items-center">
+                                {d.hasGoogleUpdate && (
+                                  <div className="w-4 h-4 rounded-full border border-slate-300 bg-white text-[9px] font-bold text-slate-500 flex items-center justify-center mb-1 shadow-2xs">
+                                    {d.updateBadge}
+                                  </div>
+                                )}
+                                <span>{d.shortLabel}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
