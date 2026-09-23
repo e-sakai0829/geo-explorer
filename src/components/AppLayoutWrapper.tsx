@@ -11,7 +11,6 @@ import {
   ChevronDown, 
   Globe, 
   Check, 
-  RefreshCw, 
   MessageSquare,
   FolderPlus,
   Lock,
@@ -34,7 +33,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/privacy" ||
     pathname === "/legal";
 
-  const { lang, setLang, t } = useLanguage();
+  const { lang, setLang } = useLanguage();
   const { projectId, currentProject, projects, plan, setProjectId, refreshProjects } = useProject();
 
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -63,15 +62,6 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {});
-  };
-
-  const handleResetCredits = async () => {
-    try {
-      const res = await fetch("/api/user/credits", { method: "POST" });
-      if (res.ok) {
-        fetchCredits();
-      }
-    } catch (e) {}
   };
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -110,8 +100,8 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       setNewProjectName("");
       setNewProjectDomain("");
       setNewProjectCompetitors("");
-    } catch (err: any) {
-      setCreateError(err.message || "エラーが発生しました。");
+    } catch (err: unknown) {
+      setCreateError(err instanceof Error ? err.message : "エラーが発生しました。");
     } finally {
       setCreateLoading(false);
     }
@@ -146,7 +136,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 antialiased font-sans">
       <Sidebar />
-      <div className="flex-1 ml-64 min-h-screen flex flex-col">
+      <div className="flex-1 min-w-0 ml-64 min-h-screen flex flex-col">
         {/* Top global header for App (DB動的データ連携 & マルチプロジェクト切替) */}
         <header className="h-14 bg-white border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-40 shadow-xs">
           <div className="flex items-center gap-3">

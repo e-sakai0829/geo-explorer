@@ -4,111 +4,114 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const runtime = 'nodejs';
-const TTL = 7 * 86400000;
+export const maxDuration = 30;
+const DAY = 86400000;
 const memory = new Map<string, SiteExplorerResult>();
 const pending = new Map<string, Promise<SiteExplorerResult>>();
-const budgets = new Map<string, { count: number; until: number }>();
-const failures = new Map<string, number>();
+
 function remember(data: SiteExplorerResult) {
   memory.delete(data.domain);
   memory.set(data.domain, data);
   if (memory.size > 100) memory.delete(memory.keys().next().value!);
 }
 function age(data: SiteExplorerResult) { return Date.now() - Date.parse(data.fetchedAt); }
-function fresh(data: SiteExplorerResult) { return age(data) >= 0 && age(data) < (data.warnings.length ? 300000 : TTL); }
-function json(data: unknown, status = 200) { return NextResponse.json(data, { status, headers: { 'Cache-Control': 'private, no-store' } }); }
+function fresh(data: SiteExplorerResult) { return age(data) >= 0 && age(data) < (data.warnings.length ? 300000 : 7 * DAY); }
+function json(data: unknown, status = 200, retryAfter?: number) {
+  return NextResponse.json(data, { status, headers: { 'Cache-Control': 'private, no-store', ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}) } });
+}
+type Admin = ReturnType<typeof createAdminClient>;
+type Claim = { status?: string; token?: string; data?: unknown };
+
+async function userId(req: NextRequest): Promise<string | null> {
+  const header = req.headers?.get('authorization');
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const { data } = await createAdminClient().auth.getUser(header.slice(7));
+      if (data.user) return data.user.id;
+    } catch { /* Cookie authentication may still succeed. */ }
+  }
+  try {
+    const { data } = await (await createServerSupabaseClient()).auth.getUser();
+    return data.user?.id ?? null;
+  } catch { return null; }
+}
+
+async function claim(db: Admin, domain: string, user: string): Promise<Claim> {
+  const { data, error } = await db.rpc('reserve_seo_site_explorer', { p_domain: domain, p_user: user });
+  if (error || !data || typeof data !== 'object') throw new DataForSeoError('CACHE_UNAVAILABLE', 503);
+  return data as Claim;
+}
 
 export async function GET(req: NextRequest) {
   try {
-    // 認証（Bearer トークン または Cookie）
-    let user: { id: string } | null = null;
-    const authHeader = typeof req.headers?.get === 'function' ? req.headers.get('authorization') : null;
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      try {
-        const admin = createAdminClient();
-        const { data } = await admin.auth.getUser(token);
-        if (data?.user) user = { id: data.user.id };
-      } catch {}
-    }
-    if (!user) {
-      try {
-        const auth = await createServerSupabaseClient();
-        const { data: { user: cookieUser } } = await auth.auth.getUser();
-        if (cookieUser) user = { id: cookieUser.id };
-      } catch {}
-    }
-
+    const user = await userId(req);
     if (!user) return json({ error: 'ログインが必要です。' }, 401);
-
+    if (process.env.SEO_SITE_EXPLORER_V3_ENABLED !== 'true')
+      return json({ error: 'SEO分析機能の更新準備中です。', code: 'SEO_V3_DISABLED' }, 503);
     let domain: string;
     try { domain = normalizeDomain(new URL(req.url).searchParams.get('domain') ?? ''); }
     catch { return json({ error: '有効な公開ドメインを入力してください。' }, 400); }
 
-    // A query parameter must never bypass the paid-request cache.
     const cached = memory.get(domain);
     if (cached && fresh(cached)) return json({ ...cached, cached: true, cacheSource: 'memory' });
     let stale = cached;
-    let db: ReturnType<typeof createAdminClient> | null = null;
     try {
-      db = createAdminClient();
-      const { data, error } = await db.from('seo_site_explorer_cache').select('data').eq('target_domain', domain).abortSignal(AbortSignal.timeout(2500)).maybeSingle();
-      if (!error && isSiteExplorerResult(data?.data, domain)) {
-        if (fresh(data.data)) { remember(data.data); return json({ ...data.data, cached: true, cacheSource: 'supabase' }); }
-        if (!stale || Date.parse(data.data.fetchedAt) > Date.parse(stale.fetchedAt)) stale = data.data;
+      // Local single-flight avoids duplicate work in one process. The DB lease is the
+      // authority across processes and is mandatory before any paid provider call.
+      const inFlight = pending.get(domain);
+      if (inFlight) return json({ ...await inFlight, cached: false });
+
+      const db = createAdminClient();
+      const { data: dbRow, error: dbError } = await db.from('seo_site_explorer_cache')
+        .select('data').eq('target_domain', domain).abortSignal(AbortSignal.timeout(2500)).maybeSingle();
+      if (dbError) throw new DataForSeoError('CACHE_UNAVAILABLE', 503);
+      if (isSiteExplorerResult(dbRow?.data, domain)) {
+        if (fresh(dbRow.data)) { remember(dbRow.data); return json({ ...dbRow.data, cached: true, cacheSource: 'supabase' }); }
+        if (!stale || Date.parse(dbRow.data.fetchedAt) > Date.parse(stale.fetchedAt)) stale = dbRow.data;
       }
-    } catch { /* DB cache is optional; memory and stale data remain available. */ }
-    try {
-      let work = pending.get(domain);
-      if (!work) {
-        const now = Date.now();
-        for (const [key, value] of budgets) if (value.until <= now) budgets.delete(key);
-        for (const [key, until] of failures) if (until <= now) failures.delete(key);
-        if (failures.has(domain)) throw new DataForSeoError('PROVIDER_COOLDOWN', 503);
-        const budget = budgets.get(user.id) ?? { count: 0, until: now + 3600000 };
-        // Local protection only. A durable account quota is needed for a global cost ceiling.
-        if (budget.count >= 5 || budgets.size >= 1000 || pending.size >= 5) throw new DataForSeoError('RATE_LIMITED', 429);
-        budget.count++;
-        budgets.set(user.id, budget);
-        work = (async () => {
-          try {
-            const result = await getSiteExplorerData(domain);
-            remember(result);
-            if (db && result.warnings.length === 0) {
-              try {
-                const { error } = await db.from('seo_site_explorer_cache').upsert({ target_domain: domain, data: result, updated_at: result.fetchedAt }, { onConflict: 'target_domain' }).abortSignal(AbortSignal.timeout(2500));
-                if (error) console.warn('[SEO cache] persistence unavailable');
-              } catch { console.warn('[SEO cache] persistence unavailable'); }
-            }
-            return result;
-          } catch (error) {
-            failures.set(domain, Date.now() + 15000);
-            if (failures.size > 100) failures.delete(failures.keys().next().value!);
-            throw error;
-          } finally { pending.delete(domain); }
-        })();
-        pending.set(domain, work);
+
+      const reservation = await claim(db, domain, user);
+      if (reservation.status === 'cached') {
+        if (!isSiteExplorerResult(reservation.data, domain)) throw new DataForSeoError('CACHE_UNAVAILABLE', 503);
+        remember(reservation.data);
+        return json({ ...reservation.data, cached: true, cacheSource: 'supabase' });
       }
+      if (reservation.status === 'limited') throw new DataForSeoError('RATE_LIMITED', 429);
+      if (reservation.status === 'busy' || reservation.status === 'cooldown') throw new DataForSeoError('PROVIDER_COOLDOWN', 503);
+      if (reservation.status !== 'reserved' || !/^[0-9a-f-]{36}$/i.test(reservation.token ?? ''))
+        throw new DataForSeoError('CACHE_UNAVAILABLE', 503);
+      const token = reservation.token!;
+      const work = (async () => {
+        try {
+          const result = await getSiteExplorerData(domain);
+          if (!isSiteExplorerResult(result, domain)) throw new DataForSeoError('PROVIDER_INVALID_RESULT', 502);
+          const { data: saved, error: saveError } = await db.rpc('finish_seo_site_explorer', { p_domain: domain, p_token: token, p_data: result });
+          if (saveError || saved !== true) throw new DataForSeoError('CACHE_UNAVAILABLE', 503);
+          remember(result);
+          return result;
+        } catch (error) {
+          try { await db.rpc('fail_seo_site_explorer', { p_domain: domain, p_token: token }); }
+          catch { /* The lease expires automatically if the request is interrupted. */ }
+          throw error;
+        } finally { pending.delete(domain); }
+      })();
+      pending.set(domain, work);
       return json({ ...await work, cached: false });
     } catch (error) {
-      if (stale && age(stale) >= 0 && age(stale) < 30 * 86400000) return json({ ...stale, cached: true, stale: true, warnings: [...stale.warnings, '再取得に失敗したため、過去の取得データを表示しています。'] });
+      if (stale && age(stale) >= 0 && age(stale) < 30 * DAY)
+        return json({ ...stale, cached: true, stale: true, warnings: [...stale.warnings, '再取得できないため、過去の取得データを表示しています。'] });
       throw error;
     }
   } catch (error) {
     const status = error instanceof DataForSeoError ? error.status : 503;
     const code = error instanceof DataForSeoError ? error.code : 'SEO_UNAVAILABLE';
-    let message = 'データを取得できませんでした。時間をおいて再実行してください。';
-    if (code === 'PROVIDER_NOT_CONFIGURED') {
-      message = 'DataForSEO APIの認証情報が未設定です。Vercel環境変数（DATAFORSEO_API_LOGIN / DATAFORSEO_API_PASSWORD）を設定してください。';
-    } else if (code === 'PROVIDER_COOLDOWN') {
-      message = '直前の取得エラーによるクールダウン中です。数十秒待ってから再実行してください。';
-    } else if (code === 'RATE_LIMITED') {
-      message = '取得回数の上限に達しました。時間をおいて再実行してください。';
-    } else if (code === 'PROVIDER_HTTP_402') {
-      message = 'DataForSEOの残高が不足しています。管理画面よりチャージしてください。';
-    } else if (error instanceof Error && error.message) {
-      message = `データを取得できませんでした (${error.message})。`;
-    }
-    return json({ error: message, code }, status);
+    const messages: Record<string, string> = {
+      CACHE_UNAVAILABLE: '検索データの保存先を確認できません。現在は有料APIの取得を停止しています。',
+      PROVIDER_NOT_CONFIGURED: '検索データの取得設定を確認できません。',
+      PROVIDER_COOLDOWN: '別の取得が進行中か、直前の失敗後の待機中です。しばらくして再実行してください。',
+      RATE_LIMITED: '取得回数の上限に達しました。時間をおいて再実行してください。',
+      PROVIDER_HTTP_402: '検索データの提供元で残高不足が発生しました。',
+    };
+    return json({ error: messages[code] ?? 'データを取得できませんでした。時間をおいて再実行してください。', code }, status, code === 'PROVIDER_COOLDOWN' ? 3 : undefined);
   }
 }

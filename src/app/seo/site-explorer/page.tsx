@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Globe, Search, Download, ExternalLink, FileText, BarChart3, ArrowUpRight, ArrowDownRight, RefreshCw, Calendar, Zap, Database } from "lucide-react";
 
 import type { SiteExplorerResult, FormattedKeyword as OrganicKeyword, FormattedTopPage as TopPage, FormattedMonthlyData as MonthlyHistoryPoint } from "@/lib/dataforseo";
-import { calculateNiceScale, csvCell, displayMetric } from "@/lib/seo-chart";
+import { calculateNiceScale, csvCell, displayMetric, selectHistoryPeriod } from "@/lib/seo-chart";
 import { supabase } from "@/lib/supabase";
 type SummaryData = SiteExplorerResult['summary'];
 const DEFAULT_SUMMARY: SummaryData = { dr: null, ur: null, backlinks: null, refDomains: null, dofollowPercent: null, organicKeywords: null, organicTraffic: null, trafficValue: null, pos1_3Count: null, pos4_10Count: null, pos11_20Count: null, pos21_50Count: null };
@@ -28,13 +28,16 @@ function SiteExplorerContent() {
   const [isCached, setIsCached] = useState<boolean>(false);
   const [resultDomain, setResultDomain] = useState('未取得');
   const [notice, setNotice] = useState('ドメインを入力して解析を実行してください。');
+  const [noticeError, setNoticeError] = useState(false);
   const request = useRef<{ id: number; controller?: AbortController }>({ id: 0 });
   useEffect(() => () => { request.current.id++; request.current.controller?.abort(); }, []);
   const [lastFetchedAt, setLastFetchedAt] = useState<string>("未取得");
 
   // 実データ状態管理
   const [summary, setSummary] = useState<SummaryData>(DEFAULT_SUMMARY);
-  const [historyData, setHistoryData] = useState<MonthlyHistoryPoint[]>(DEFAULT_HISTORY);
+  const [historyAll, setHistoryAll] = useState<MonthlyHistoryPoint[]>(DEFAULT_HISTORY);
+  const [period, setPeriod] = useState<6 | 12 | 24 | 'all'>(24);
+  const historyData = useMemo(() => selectHistoryPeriod(historyAll, period), [historyAll, period]);
   const [keywords, setKeywords] = useState<OrganicKeyword[]>(DEFAULT_KEYWORDS);
   const [topPages, setTopPages] = useState<TopPage[]>(DEFAULT_TOP_PAGES);
 
@@ -45,8 +48,7 @@ function SiteExplorerContent() {
     pos1_3: true,
     pos4_10: true,
     pos11_20: true,
-    pos21_50: false,
-    pos51_plus: false
+    pos21_50: false
   });
 
   const trafficChartRef = useRef<HTMLDivElement>(null);
@@ -69,9 +71,9 @@ function SiteExplorerContent() {
     const controller = new AbortController();
     request.current.controller = controller;
     setIsAnalyzing(true);
-    setSummary(DEFAULT_SUMMARY); setHistoryData([]); setKeywords([]); setTopPages([]);
+    setSummary(DEFAULT_SUMMARY); setHistoryAll([]); setKeywords([]); setTopPages([]);
     setHoveredTrafficIndex(null); setHoveredPosIndex(null);
-    setResultDomain('取得中'); setLastFetchedAt('未取得'); setIsCached(false); setNotice('');
+    setResultDomain('取得中'); setLastFetchedAt('未取得'); setIsCached(false); setNotice(''); setNoticeError(false);
     try {
       const headers: Record<string, string> = {};
       try {
@@ -88,14 +90,15 @@ function SiteExplorerContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'データを取得できませんでした。');
       if (id !== request.current.id) return;
-      if (data.schemaVersion !== 2 || !data.summary || !Array.isArray(data.history) || !Array.isArray(data.keywords) || !Array.isArray(data.topPages)) throw new Error('応答形式を確認できませんでした。');
-      setSummary(data.summary); setHistoryData(data.history); setKeywords(data.keywords); setTopPages(data.topPages);
+      if (data.schemaVersion !== 3 || !data.summary || !Array.isArray(data.history) || !Array.isArray(data.keywords) || !Array.isArray(data.topPages)) throw new Error('応答形式を確認できませんでした。');
+      setSummary(data.summary); setHistoryAll(data.history); setKeywords(data.keywords); setTopPages(data.topPages);
       setResultDomain(data.domain); setIsCached(!!data.cached);
       setLastFetchedAt(new Date(data.fetchedAt).toLocaleString('ja-JP'));
-      setNotice([...(data.warnings || []), data.history.length ? '' : '履歴データは未取得です。'].filter(Boolean).join(' '));
+      const inputPath = domain.trim().replace(/^https?:\/\//i, '').includes('/');
+      setNotice([...(data.warnings || []), inputPath ? '入力URLのパスは対象外です。ドメイン全体を表示しています。' : '', data.history.length ? '' : '履歴データは未取得です。'].filter(Boolean).join(' '));
     } catch (error) {
       if (id === request.current.id && !controller.signal.aborted) {
-        setResultDomain('未取得'); setNotice(error instanceof Error ? error.message : 'データを取得できませんでした。');
+        setResultDomain('未取得'); setNotice(error instanceof Error ? error.message : 'データを取得できませんでした。'); setNoticeError(true);
       }
     } finally { if (id === request.current.id) setIsAnalyzing(false); }
   };
@@ -359,7 +362,7 @@ function SiteExplorerContent() {
                 <span>DataForSEO Rank</span>
 
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-1">{displayMetric(summary.dr)}</div>
+              <div className="text-2xl font-black text-slate-900 mt-1 break-all">{displayMetric(summary.dr)}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">DataForSEO Rank（0〜1000）</div>
             </div>
 
@@ -397,7 +400,7 @@ function SiteExplorerContent() {
                 <span>オーガニックKW</span>
 
               </div>
-              <div className="text-2xl font-black text-indigo-900 mt-1">{displayMetric(summary.organicKeywords)}</div>
+              <div className="text-2xl font-black text-indigo-900 mt-1 break-all">{displayMetric(summary.organicKeywords)}</div>
               <div className="text-[10px] text-indigo-600 font-medium mt-0.5">上位3位: {displayMetric(summary.pos1_3Count)}件</div>
             </div>
 
@@ -430,10 +433,10 @@ function SiteExplorerContent() {
         </div>
 
         {notice && (
-          <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-sm ${
+          <div role="status" className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-sm ${
             notice.includes("ログイン")
               ? "bg-amber-50 border-amber-200 text-amber-900"
-              : notice.includes("エラー") || notice.includes("できませんでした")
+              : noticeError
               ? "bg-rose-50 border-rose-200 text-rose-800"
               : "bg-slate-100 border-slate-200 text-slate-700"
           }`}>
@@ -520,13 +523,15 @@ function SiteExplorerContent() {
                     </div>
 
                     <div className="flex items-center gap-2 text-xs">
-                      <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold cursor-pointer">
+                      <label className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold">
                         <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                        <span>過去 2 年間 ▾</span>
-                      </div>
-                      <div className="bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold cursor-pointer">
-                        <span>毎月 ▾</span>
-                      </div>
+                        <span className="sr-only">表示期間</span>
+                        <select aria-label="表示期間" value={period} onChange={e => setPeriod(e.target.value === 'all' ? 'all' : Number(e.target.value) as 6 | 12 | 24)} className="bg-transparent font-semibold">
+                          <option value="6">過去6か月</option><option value="12">過去1年</option>
+                          <option value="24">過去2年</option><option value="all">取得できた全期間</option>
+                        </select>
+                      </label>
+                      <span className="bg-slate-100 px-2.5 py-1 rounded text-slate-700 font-semibold">月次</span>
                     </div>
                   </div>
 
@@ -841,7 +846,7 @@ function SiteExplorerContent() {
                       {/* ホバー時のツールチップ */}
                       {hoveredPosIndex !== null && posPoints[hoveredPosIndex] && (
                         <div
-                          className="absolute break-words bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 min-w-[190px]"
+                          className="absolute break-words bg-white rounded-lg shadow-xl border border-slate-200 p-3 pointer-events-none z-30 transition-all duration-75 w-[210px] max-w-[calc(100%-16px)]"
                           style={{
                             left: `max(8px, min(calc(100% - 228px), calc(${posPoints[hoveredPosIndex].x / svgTotalWidth * 100}% - 110px)))`,
                             top: `max(8px, min(calc(100% - 128px), calc(${posPoints[hoveredPosIndex].y11_20 / posChartHeight * 100}% - 116px)))`
@@ -852,7 +857,7 @@ function SiteExplorerContent() {
                           </div>
 
                           <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 mb-1 border-b border-slate-100">
-                            <span>すべての順位</span>
+                            <span>表示中の順位帯の合計</span>
                             <span className="font-mono text-slate-900">
                               {((activePositions.pos1_3 ? historyData[hoveredPosIndex]?.pos1_3 : 0) +
                                 (activePositions.pos4_10 ? historyData[hoveredPosIndex]?.pos4_10 : 0) +
@@ -942,6 +947,8 @@ function SiteExplorerContent() {
                 <h3 className="font-bold text-slate-900">集計範囲</h3>
                 <p>Google 日本・日本語。ドメインと配下のサブドメインが対象です。</p>
                 <p>トラフィックはDataForSEOの推定検索流入で、実測PVではありません。</p>
+                <p>URLを入力した場合も、パスを除いたドメイン全体を分析します。</p>
+                <p>履歴表示: {historyData.length ? historyData[0].month + '〜' + historyData.at(-1)!.month + '（' + historyData.length + 'か月分）' : '未取得'}</p>
                 <p>キーワードは推定流入上位100件まで。上位ページの流入・シェアは取得キーワード内の集計です。</p>
                 <p>DR・UR互換値、国別内訳、Googleアップデート（未連携）情報は未取得です。</p>
                 <p>取得KWの検索意図: {['I', 'C', 'N', 'T', '?'].map(intent => intent + ': ' + keywords.filter(k => k.intent === intent).length).join(' / ')}</p>
@@ -1078,12 +1085,12 @@ function SiteExplorerContent() {
                           <td className="py-3 px-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               <span className="font-mono font-bold text-slate-700 w-5">{displayMetric(item.kd)}</span>
-                              <div className="w-8 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div className="w-8 bg-slate-100 h-1.5 rounded-full overflow-hidden" aria-hidden="true">
                                 <div
                                   className={`h-full rounded-full ${
                                     (item.kd ?? 0) > 40 ? "bg-rose-500" : (item.kd ?? 0) > 20 ? "bg-amber-500" : "bg-emerald-500"
                                   }`}
-                                  style={{ width: `${displayMetric(item.kd)}%` }}
+                                  style={{ width: `${Math.min(100, item.kd ?? 0)}%` }}
                                 ></div>
                               </div>
                             </div>

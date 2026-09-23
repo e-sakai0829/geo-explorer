@@ -29,3 +29,18 @@ export function csvCell(value: unknown): string {
 
 export const displayMetric = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("ja-JP", { maximumFractionDigits: 2 }) : "—";
+
+export function selectHistoryPeriod<T extends { month: string }>(history: T[], period: 6 | 12 | 24 | 'all'): T[] {
+  if (period === 'all' || history.length === 0) return history;
+  const latest = history[history.length - 1].month;
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(latest);
+  if (!match) return [];
+  const lastIndex = Number(match[1]) * 12 + Number(match[2]) - 1;
+  const firstIndex = lastIndex - period + 1;
+  return history.filter(item => {
+    const parts = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(item.month);
+    if (!parts) return false;
+    const index = Number(parts[1]) * 12 + Number(parts[2]) - 1;
+    return index >= firstIndex && index <= lastIndex;
+  });
+}
