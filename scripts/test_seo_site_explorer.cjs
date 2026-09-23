@@ -13,7 +13,7 @@ function load(relative, mocks = {}, globals = {}) {
     if (Object.hasOwn(mocks, name)) return mocks[name];
     throw new Error('Unmocked import: ' + name);
   }, console, URL, URLSearchParams, Buffer, AbortSignal, AbortController, Date, Error, setTimeout, clearTimeout,
-  process: { env: { DATAFORSEO_API_LOGIN: 'offline-test', DATAFORSEO_API_PASSWORD: 'offline-test', SEO_SITE_EXPLORER_V3_ENABLED: 'true' } },
+  process: { env: { DATAFORSEO_API_LOGIN: 'offline-test', DATAFORSEO_API_PASSWORD: 'offline-test', SEO_SITE_EXPLORER_V3_ENABLED: 'true', SEO_BETA_USER_IDS: 'u1' } },
   fetch: async () => { throw new Error('NETWORK_FORBIDDEN'); }, ...globals }, { filename: file });
   return module.exports;
 }
@@ -111,6 +111,9 @@ async function main() {
   });
   const get = query => route.GET({ url: 'https://local/api/seo/site-explorer?' + query });
   assert.equal((await get('domain=example.com')).status, 401); assert.equal(calls, 0); passed++;
+  user = { id: 'outsider' };
+  const denied = await get('domain=example.com');
+  assert.equal(denied.status, 403); assert.equal(denied.body.code, 'SEO_BETA_ACCESS_DENIED'); assert.equal(calls, 0); passed++;
   user = { id: 'u1' };
   const offRoute = load('src/app/api/seo/site-explorer/route.ts', {
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options.status }) } },
@@ -120,6 +123,14 @@ async function main() {
   }, { process: { env: { SEO_SITE_EXPLORER_V3_ENABLED: 'false' } } });
   const off = await offRoute.GET({ url: 'https://local/api/seo/site-explorer?domain=example.com' });
   assert.equal(off.status, 503); assert.equal(off.body.code, 'SEO_V3_DISABLED'); assert.equal(calls, 0); passed++;
+  const noListRoute = load('src/app/api/seo/site-explorer/route.ts', {
+    'next/server': { NextResponse: { json: (body, options) => ({ body, status: options.status }) } },
+    '@/lib/dataforseo': { ...client, getSiteExplorerData: async () => { calls++; throw new Error('PAID_CALL_WITHOUT_ALLOWLIST'); } },
+    '@/lib/supabase-admin': { createAdminClient: () => db },
+    '@/lib/supabase-server': { createServerSupabaseClient: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }) },
+  }, { process: { env: { SEO_SITE_EXPLORER_V3_ENABLED: 'true' } } });
+  const noList = await noListRoute.GET({ url: 'https://local/api/seo/site-explorer?domain=example.com' });
+  assert.equal(noList.status, 403); assert.equal(calls, 0); passed++;
   assert.equal((await get('domain=localhost')).status, 400); assert.equal(calls, 0); passed++;
   const concurrent = await Promise.all([get('domain=example.com'), get('domain=example.com')]);
   assert.deepEqual(concurrent.map(r => r.status).sort(), [200, 503]); assert.equal(calls, 1); passed++;

@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
     if (!user) return json({ error: 'ログインが必要です。' }, 401);
     if (process.env.SEO_SITE_EXPLORER_V3_ENABLED !== 'true')
       return json({ error: 'SEO分析機能の更新準備中です。', code: 'SEO_V3_DISABLED' }, 503);
+    const betaUsers = new Set((process.env.SEO_BETA_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean));
+    if (!betaUsers.has(user))
+      return json({ error: 'SEO分析βの利用対象外です。', code: 'SEO_BETA_ACCESS_DENIED' }, 403);
     let domain: string;
     try { domain = normalizeDomain(new URL(req.url).searchParams.get('domain') ?? ''); }
     catch { return json({ error: '有効な公開ドメインを入力してください。' }, 400); }
