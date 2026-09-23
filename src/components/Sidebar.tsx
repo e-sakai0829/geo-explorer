@@ -157,11 +157,16 @@ export default function Sidebar() {
       .then((res) => res.json())
       .then((data) => {
         if (data && !data.error) {
-          setPlanName(data.plan.charAt(0).toUpperCase() + data.plan.slice(1));
+          if (data.plan) {
+            setPlanName(data.plan.charAt(0).toUpperCase() + data.plan.slice(1));
+          }
+          const total = data.monthly_credits ?? data.monthlyCredits ?? 10;
+          const used = data.used_credits ?? data.usedCredits ?? 0;
+          const remaining = data.remaining_credits ?? data.remainingCredits ?? Math.max(0, total - used);
           setCredits({
-            total: data.monthlyCredits,
-            used: data.usedCredits,
-            remaining: data.remainingCredits,
+            total,
+            used,
+            remaining,
           });
         }
       })

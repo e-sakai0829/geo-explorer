@@ -207,7 +207,15 @@ function SiteExplorerContent() {
 
   // ポジションスタック面グラフ (動的Nice Scale)
   const posChartHeight = 160;
-  const rawMaxPos = Math.max(...historyData.map(d => d.pos1_3 + d.pos4_10 + d.pos11_20), 0);
+  const rawMaxPos = Math.max(
+    ...historyData.map(d =>
+      (activePositions.pos1_3 ? d.pos1_3 : 0) +
+      (activePositions.pos4_10 ? d.pos4_10 : 0) +
+      (activePositions.pos11_20 ? d.pos11_20 : 0) +
+      (activePositions.pos21_50 ? (d.pos21_50 ?? 0) : 0)
+    ),
+    0
+  );
   const posScale = calculateNiceScale(rawMaxPos, 4);
   const maxPos = posScale.max;
 
@@ -221,14 +229,19 @@ function SiteExplorerContent() {
     const v1_3 = activePositions.pos1_3 ? d.pos1_3 : 0;
     const v4_10 = activePositions.pos4_10 ? d.pos4_10 : 0;
     const v11_20 = activePositions.pos11_20 ? d.pos11_20 : 0;
+    const v21_50 = activePositions.pos21_50 ? (d.pos21_50 ?? 0) : 0;
 
     const yBase = posChartHeight;
     const y1_3 = posChartHeight - (v1_3 / maxPos) * posChartHeight;
     const y4_10 = posChartHeight - ((v1_3 + v4_10) / maxPos) * posChartHeight;
     const y11_20 = posChartHeight - ((v1_3 + v4_10 + v11_20) / maxPos) * posChartHeight;
+    const y21_50 = posChartHeight - ((v1_3 + v4_10 + v11_20 + v21_50) / maxPos) * posChartHeight;
 
-    return { x, yBase, y1_3, y4_10, y11_20, data: d };
+    return { x, yBase, y1_3, y4_10, y11_20, y21_50, data: d };
   });
+
+  const posArea21_50_D = !posPoints.length ? "" : posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y21_50}`, "")
+    + ` L ${posPoints.at(-1)!.x} ${posChartHeight} L ${posPoints[0].x} ${posChartHeight} Z`;
 
   const posArea11_20_D = !posPoints.length ? "" : posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y11_20}`, "")
     + ` L ${posPoints.at(-1)!.x} ${posChartHeight} L ${posPoints[0].x} ${posChartHeight} Z`;
@@ -239,6 +252,7 @@ function SiteExplorerContent() {
   const posArea1_3_D = !posPoints.length ? "" : posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y1_3}`, "")
     + ` L ${posPoints.at(-1)!.x} ${posChartHeight} L ${posPoints[0].x} ${posChartHeight} Z`;
 
+  const posLine21_50_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y21_50}`, "");
   const posLine11_20_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y11_20}`, "");
   const posLine4_10_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y4_10}`, "");
   const posLine1_3_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y1_3}`, "");
@@ -516,33 +530,15 @@ function SiteExplorerContent() {
                     </div>
                   </div>
 
-                  {/* チェックボックス項目バー */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-600 mb-4 pb-2 border-b border-slate-50">
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" className="rounded text-slate-400" disabled />
-                      <span>参照ドメイン</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" className="rounded text-slate-400" disabled />
-                      <span>平均ドメイン評価</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" className="rounded text-slate-400" disabled />
-                      <span>平均 URL 評価</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer font-bold text-amber-600">
-                      <input type="checkbox" checked readOnly className="rounded text-amber-500 focus:ring-amber-400" />
-                      <span>平均オーガニックトラフィック</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" className="rounded text-slate-400" disabled />
-                      <span>平均オーガニックトラフィック値</span>
-                    </label>
-                  </div>
-
-                  {/* グラフヘッダー凡例 */}
-                  <div className="flex justify-end text-xs font-bold text-amber-600 mb-1">
-                    <span>平均オーガニックトラフィック</span>
+                  {/* 指標バッジ */}
+                  <div className="flex items-center justify-between text-xs mb-3 pb-2 border-b border-slate-50">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shadow-2xs"></span>
+                      <span className="font-bold text-amber-700 text-xs">平均オーガニックトラフィック（月間推定流入推移）</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-medium">
+                      Google 日本 (JP)
+                    </div>
                   </div>
 
                   {/* インタラクティブSVGグラフエリア (動的Niceスケール＆SVG内完全同期) */}
@@ -714,14 +710,17 @@ function SiteExplorerContent() {
                         </span>
                       </label>
 
-                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400">
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
                         <input
                           type="checkbox"
-                          disabled checked={false}
+                          checked={activePositions.pos21_50}
                           onChange={(e) => setActivePositions({ ...activePositions, pos21_50: e.target.checked })}
-                          className="rounded text-slate-300"
+                          className="rounded text-amber-500 focus:ring-amber-400"
                         />
-                        <span>21-50</span>
+                        <span className="font-bold text-amber-600 flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#eab308]"></span>
+                          21-50
+                        </span>
                       </label>
                     </div>
                   </div>
@@ -740,6 +739,10 @@ function SiteExplorerContent() {
                         preserveAspectRatio="none"
                       >
                         <defs>
+                          <linearGradient id="posGradient21_50LiveExact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#eab308" stopOpacity="0.38" />
+                            <stop offset="100%" stopColor="#eab308" stopOpacity="0.08" />
+                          </linearGradient>
                           <linearGradient id="posGradient11_20LiveExact" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
                             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.1" />
@@ -780,6 +783,9 @@ function SiteExplorerContent() {
                         ))}
 
                         {/* 各順位帯のスタック面 */}
+                        {activePositions.pos21_50 && (
+                          <path d={posArea21_50_D} fill="url(#posGradient21_50LiveExact)" />
+                        )}
                         {activePositions.pos11_20 && (
                           <path d={posArea11_20_D} fill="url(#posGradient11_20LiveExact)" />
                         )}
@@ -791,6 +797,9 @@ function SiteExplorerContent() {
                         )}
 
                         {/* 折れ線境界 */}
+                        {activePositions.pos21_50 && (
+                          <path d={posLine21_50_D} fill="none" stroke="#eab308" strokeWidth="1.5" strokeLinejoin="round" />
+                        )}
                         {activePositions.pos11_20 && (
                           <path d={posLine11_20_D} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinejoin="round" />
                         )}
@@ -813,6 +822,9 @@ function SiteExplorerContent() {
                               strokeWidth="1.5"
                               strokeDasharray="4 3"
                             />
+                            {activePositions.pos21_50 && (
+                              <circle cx={posPoints[hoveredPosIndex].x} cy={posPoints[hoveredPosIndex].y21_50} r="4" fill="#eab308" stroke="#ffffff" strokeWidth="2" />
+                            )}
                             {activePositions.pos11_20 && (
                               <circle cx={posPoints[hoveredPosIndex].x} cy={posPoints[hoveredPosIndex].y11_20} r="4" fill="#f59e0b" stroke="#ffffff" strokeWidth="2" />
                             )}
@@ -842,40 +854,61 @@ function SiteExplorerContent() {
                           <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 mb-1 border-b border-slate-100">
                             <span>すべての順位</span>
                             <span className="font-mono text-slate-900">
-                              {(historyData[hoveredPosIndex]?.pos1_3 + historyData[hoveredPosIndex]?.pos4_10 + historyData[hoveredPosIndex]?.pos11_20)}
+                              {((activePositions.pos1_3 ? historyData[hoveredPosIndex]?.pos1_3 : 0) +
+                                (activePositions.pos4_10 ? historyData[hoveredPosIndex]?.pos4_10 : 0) +
+                                (activePositions.pos11_20 ? historyData[hoveredPosIndex]?.pos11_20 : 0) +
+                                (activePositions.pos21_50 ? (historyData[hoveredPosIndex]?.pos21_50 ?? 0) : 0))}
                             </span>
                           </div>
 
                           <div className="space-y-1 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                                <span className="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
-                                11-20
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {historyData[hoveredPosIndex]?.pos11_20}
-                              </span>
-                            </div>
+                            {activePositions.pos21_50 && (
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                  <span className="w-2 h-2 rounded-full bg-[#eab308]"></span>
+                                  21-50
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {historyData[hoveredPosIndex]?.pos21_50 ?? 0}
+                                </span>
+                              </div>
+                            )}
 
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                                <span className="w-2 h-2 rounded-full bg-[#ea580c]"></span>
-                                4-10
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {historyData[hoveredPosIndex]?.pos4_10}
-                              </span>
-                            </div>
+                            {activePositions.pos11_20 && (
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                  <span className="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
+                                  11-20
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {historyData[hoveredPosIndex]?.pos11_20}
+                                </span>
+                              </div>
+                            )}
 
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                                <span className="w-2 h-2 rounded-full bg-[#b45309]"></span>
-                                1-3
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {historyData[hoveredPosIndex]?.pos1_3}
-                              </span>
-                            </div>
+                            {activePositions.pos4_10 && (
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                  <span className="w-2 h-2 rounded-full bg-[#ea580c]"></span>
+                                  4-10
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {historyData[hoveredPosIndex]?.pos4_10}
+                                </span>
+                              </div>
+                            )}
+
+                            {activePositions.pos1_3 && (
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                                  <span className="w-2 h-2 rounded-full bg-[#b45309]"></span>
+                                  1-3
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {historyData[hoveredPosIndex]?.pos1_3}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
