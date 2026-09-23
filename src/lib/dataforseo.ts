@@ -1,347 +1,156 @@
-/**
- * DataForSEO API Client & Normalizer
- * Provides high-speed, cost-optimized SEO metrics and keyword data.
- */
-
+type Row = Record<string, unknown>;
+const row = (value: unknown): Row => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
+const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+const num = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : null;
+const sum = (...values: unknown[]): number | null => values.every(v => num(v) !== null) ? (values as number[]).reduce((a, b) => a + b, 0) : null;
 export interface FormattedKeyword {
-  id: string;
-  keyword: string;
-  intent: "I" | "N" | "C" | "T";
-  intentLabel: string;
-  position: number;
-  prevPosition: number;
-  volume: number;
-  kd: number;
-  traffic: number;
-  url: string;
+  id: string; keyword: string; intent: "I" | "N" | "C" | "T" | "?"; intentLabel: string;
+  position: number; prevPosition: number | null; volume: number | null; kd: number | null; traffic: number | null; url: string;
 }
-
 export interface FormattedTopPage {
-  id: string;
-  url: string;
-  pageType: string;
-  ur: number;
-  traffic: number;
-  trafficShare: number;
-  trafficValue: number;
-  refDomains: number;
-  keywordsCount: number;
-  topKeyword: string;
-  topKeywordPos: number;
-  topKeywordVol: number;
+  id: string; url: string; pageType: string; ur: number | null; traffic: number | null;
+  trafficShare: number | null; trafficValue: number | null; refDomains: number | null;
+  keywordsCount: number; topKeyword: string; topKeywordPos: number; topKeywordVol: number | null;
 }
-
 export interface FormattedMonthlyData {
-  month: string;
-  shortLabel: string;
-  traffic: number;
-  pos1_3: number;
-  pos4_10: number;
-  pos11_20: number;
-  pos21_50: number;
-  hasGoogleUpdate?: boolean;
-  updateBadge?: string;
+  month: string; shortLabel: string; traffic: number; pos1_3: number; pos4_10: number;
+  pos11_20: number; pos21_50: number; hasGoogleUpdate?: boolean; updateBadge?: string;
 }
-
 export interface SiteExplorerResult {
-  domain: string;
-  summary: {
-    dr: number;
-    ur: number;
-    backlinks: number;
-    refDomains: number;
-    dofollowPercent: number;
-    organicKeywords: number;
-    organicTraffic: number;
-    trafficValue: number;
-    pos1_3Count: number;
-    pos4_10Count: number;
-    pos11_20Count: number;
-    pos21_50Count: number;
-  };
-  history: FormattedMonthlyData[];
-  keywords: FormattedKeyword[];
-  topPages: FormattedTopPage[];
-  source: "dataforseo" | "fallback";
-  fetchedAt: string;
+  schemaVersion: 2; domain: string; source: "dataforseo"; fetchedAt: string; warnings: string[];
+  summary: { dr: number | null; ur: number | null; backlinks: number | null; refDomains: number | null;
+    dofollowPercent: number | null; organicKeywords: number | null; organicTraffic: number | null;
+    trafficValue: number | null; pos1_3Count: number | null; pos4_10Count: number | null;
+    pos11_20Count: number | null; pos21_50Count: number | null };
+  history: FormattedMonthlyData[]; keywords: FormattedKeyword[]; topPages: FormattedTopPage[];
 }
-
-// ドメインの正規化 (URLやhttp://を除去)
 export function normalizeDomain(input: string): string {
-  let cleaned = input.trim().toLowerCase();
-  cleaned = cleaned.replace(/^https?:\/\//, "");
-  cleaned = cleaned.replace(/\/.*$/, "");
-  return cleaned;
+  if (!input.trim() || input.length > 2048) throw new Error("INVALID_DOMAIN");
+  const url = new URL(input.includes("://") ? input.trim() : `https://${input.trim()}`);
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port ||
+      host.length > 253 || !host.includes('.') || /^\d+(\.\d+){3}$/.test(host) ||
+      !host.split('.').every(s => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s)) ||
+      /\.(localhost|local|internal|test|invalid)$/.test(host)) throw new Error("INVALID_DOMAIN");
+  return host;
 }
-
-function getAuthHeader(): string {
-  const login = process.env.DATAFORSEO_API_LOGIN || "e-sakai@traditionalart.biz";
-  const password = process.env.DATAFORSEO_API_PASSWORD || "cbcc07d672b7cbdd";
-  return `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`;
+export class DataForSeoError extends Error {
+  constructor(public code: string, public status = 502) { super(code); }
 }
-
-async function callDataForSeo(endpoint: string, payload: any): Promise<any> {
-  const url = `https://api.dataforseo.com/v3/${endpoint}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": getAuthHeader(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-    next: { revalidate: 0 }
-  });
-
-  if (!res.ok) {
-    throw new Error(`DataForSEO API HTTP Error ${res.status}: ${res.statusText}`);
+export async function callDataForSeo(endpoint: string, payload: unknown): Promise<Row> {
+  const login = process.env.DATAFORSEO_API_LOGIN;
+  const password = process.env.DATAFORSEO_API_PASSWORD;
+  if (!login || !password) throw new DataForSeoError("PROVIDER_NOT_CONFIGURED", 503);
+  try {
+    const response = await fetch(`https://api.dataforseo.com/v3/${endpoint}`, {
+      method: "POST", cache: "no-store", signal: AbortSignal.timeout(20000),
+      headers: { Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new DataForSeoError(`PROVIDER_HTTP_${response.status}`, response.status === 429 ? 429 : 502);
+    const body = row(await response.json());
+    const task = row(list(body.tasks)[0]);
+    if (body.status_code !== 20000 || task.status_code !== 20000) throw new DataForSeoError("PROVIDER_TASK_FAILED");
+    const result = row(list(task.result)[0]);
+    if (!Object.keys(result).length) throw new DataForSeoError("PROVIDER_EMPTY_RESULT");
+    return result;
+  } catch (error) {
+    if (error instanceof DataForSeoError) throw error;
+    throw new DataForSeoError(error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name) ? "PROVIDER_TIMEOUT" : "PROVIDER_UNAVAILABLE", 503);
   }
-
-  const json = await res.json();
-  if (json.status_code && json.status_code !== 20000) {
-    console.warn(`DataForSEO API warn [${json.status_code}]: ${json.status_message}`);
-  }
-  return json;
 }
-
-// Ahrefs実画面準拠の24ヶ月メリハリ波形プロファイル (急上昇・急落・急回復)
-const AHREFS_WAVE_FACTORS = [
-  0.11, // 2024-10 (450)
-  0.13, // 2024-11 (520)
-  0.21, // 2024-12 (860) ②
-  0.16, // 2025-01 (640)
-  0.14, // 2025-02 (580)
-  0.19, // 2025-03 (780) G
-  0.18, // 2025-04 (720)
-  0.17, // 2025-05 (690)
-  0.37, // 2025-06 (1500) G
-  0.95, // 2025-07 (3900)
-  0.94, // 2025-08 (3850) G
-  1.05, // 2025-09 (4300) G
-  1.01, // 2025-10 (4150)
-  0.99, // 2025-11 (4080)
-  0.98, // 2025-12 (4016) G (Ahrefsキャプチャ基準点)
-  1.02, // 2026-01 (4200)
-  1.17, // 2026-02 (4800)
-  1.00, // 2026-03 (4100) ②
-  0.78, // 2026-04 (3200)
-  0.13, // 2026-05 (520) G 急落
-  0.14, // 2026-06 (560) G
-  0.88, // 2026-07 (3600) 急回復
-  0.86, // 2026-08 (3550) G
-  0.55  // 2026-09 (2240) 現在
-];
-
-/**
- * サイトエクスプローラー向け統合データ取得
- */
-export async function getSiteExplorerData(rawDomain: string): Promise<SiteExplorerResult> {
-  const domain = normalizeDomain(rawDomain);
-  if (!domain) {
-    throw new Error("無効なドメイン形式です。");
-  }
-
-  // 1. 並列APIコール: keywords, backlinks, history
-  const [rankedKwRes, backlinksRes, historyRes] = await Promise.allSettled([
-    callDataForSeo("dataforseo_labs/google/ranked_keywords/live", [
-      {
-        target: domain,
-        location_name: "Japan",
-        language_name: "Japanese",
-        limit: 100,
-        order_by: ["ranked_serp_element.serp_item.etv,desc"]
-      }
-    ]),
-    callDataForSeo("backlinks/summary/live", [
-      { target: domain }
-    ]),
-    callDataForSeo("dataforseo_labs/google/historical_rank_overview/live", [
-      {
-        target: domain,
-        location_name: "Japan",
-        language_name: "Japanese"
-      }
-    ])
-  ]);
-
-  // A. Backlinksの整形
-  let dr = 22;
-  let backlinks = 284;
-  let refDomains = 31;
-  let dofollowPercent = 74;
-
-  if (backlinksRes.status === "fulfilled" && backlinksRes.value?.tasks?.[0]?.result?.[0]) {
-    const bl = backlinksRes.value.tasks[0].result[0];
-    backlinks = bl.backlinks || 0;
-    refDomains = bl.referring_domains || 0;
-    const rawRank = bl.rank || 0;
-    dr = Math.min(100, Math.max(1, Math.round((rawRank / 1000) * 100)));
-    const dofollow = bl.info?.dofollow || 0;
-    dofollowPercent = backlinks > 0 ? Math.round((dofollow / backlinks) * 100) : 74;
-  }
-
-  // B. Ranked Keywordsの整形 & Top Pagesの集計
+function safeUrl(value: unknown): string | null {
+  try {
+    const url = new URL(String(value));
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
+    url.hash = '';
+    return url.href;
+  } catch { return null; }
+}
+export function normalizeResults(domain: string, ranked: Row, backlinks: Row, historical: Row, warnings: string[] = []): SiteExplorerResult {
+  const organic = row(row(ranked.metrics).organic);
+  const seen = new Set<string>();
   const keywords: FormattedKeyword[] = [];
-  const urlAgg: Record<string, {
-    url: string;
-    totalTraffic: number;
-    totalCost: number;
-    count: number;
-    topKw: string;
-    topKwPos: number;
-    topKwVol: number;
-    maxTraffic: number;
-  }> = {};
-
-  let totalEstimatedTraffic = 0;
-  let totalEstimatedValue = 0;
-  let pos1_3Count = 0;
-  let pos4_10Count = 0;
-  let pos11_20Count = 0;
-  let pos21_50Count = 0;
-
-  if (rankedKwRes.status === "fulfilled" && rankedKwRes.value?.tasks?.[0]?.result?.[0]?.items) {
-    const items = rankedKwRes.value.tasks[0].result[0].items;
-
-    items.forEach((it: any, idx: number) => {
-      const kw = it.keyword_data?.keyword || "";
-      const pos = it.ranked_serp_element?.serp_item?.rank_group || 50;
-      const prevPos = it.ranked_serp_element?.serp_item?.rank_changes?.previous_rank_absolute || pos;
-      const vol = it.keyword_data?.keyword_info?.search_volume || 0;
-      const kd = it.keyword_data?.keyword_properties?.keyword_difficulty || 0;
-      const traffic = Math.round(it.ranked_serp_element?.serp_item?.etv || (vol * (pos <= 3 ? 0.25 : pos <= 10 ? 0.05 : 0.01)));
-      const value = it.ranked_serp_element?.serp_item?.estimated_paid_traffic_cost || 0;
-      const url = it.ranked_serp_element?.serp_item?.url || `https://${domain}`;
-
-      const rawIntent = (it.keyword_data?.search_intent_info?.main_intent || "informational").toLowerCase();
-      let intent: "I" | "N" | "C" | "T" = "I";
-      let intentLabel = "Informational";
-      if (rawIntent.includes("commercial")) { intent = "C"; intentLabel = "Commercial"; }
-      else if (rawIntent.includes("navigational")) { intent = "N"; intentLabel = "Navigational"; }
-      else if (rawIntent.includes("transactional")) { intent = "T"; intentLabel = "Transactional"; }
-
-      keywords.push({
-        id: String(idx + 1),
-        keyword: kw,
-        intent,
-        intentLabel,
-        position: pos,
-        prevPosition: prevPos,
-        volume: vol,
-        kd,
-        traffic,
-        url
-      });
-
-      totalEstimatedTraffic += traffic;
-      totalEstimatedValue += value;
-
-      if (pos >= 1 && pos <= 3) pos1_3Count++;
-      else if (pos >= 4 && pos <= 10) pos4_10Count++;
-      else if (pos >= 11 && pos <= 20) pos11_20Count++;
-      else if (pos >= 21 && pos <= 50) pos21_50Count++;
-
-      // URL集計 (上位ページ生成)
-      if (!urlAgg[url]) {
-        urlAgg[url] = {
-          url,
-          totalTraffic: 0,
-          totalCost: 0,
-          count: 0,
-          topKw: kw,
-          topKwPos: pos,
-          topKwVol: vol,
-          maxTraffic: 0
-        };
-      }
-      urlAgg[url].totalTraffic += traffic;
-      urlAgg[url].totalCost += value;
-      urlAgg[url].count += 1;
-      if (traffic >= urlAgg[url].maxTraffic) {
-        urlAgg[url].maxTraffic = traffic;
-        urlAgg[url].topKw = kw;
-        urlAgg[url].topKwPos = pos;
-        urlAgg[url].topKwVol = vol;
-      }
-    });
+  const costs = new Map<string, number | null>();
+  for (const value of list(ranked.items)) {
+    const item = row(value), data = row(item.keyword_data), serp = row(row(item.ranked_serp_element).serp_item);
+    const info = row(data.keyword_info), props = row(data.keyword_properties);
+    const keyword = typeof data.keyword === 'string' ? data.keyword : '';
+    const url = safeUrl(serp.url), position = num(serp.rank_absolute);
+    if (!keyword || !url || position === null || position < 1 || !Number.isInteger(position)) continue;
+    const key = JSON.stringify([keyword, url]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const intentName = row(data.search_intent_info).main_intent;
+    const intents: Record<string, FormattedKeyword['intent']> = { informational: 'I', navigational: 'N', commercial: 'C', transactional: 'T' };
+    keywords.push({ id: key, keyword, url, position, prevPosition: num(row(serp.rank_changes).previous_rank_absolute),
+      volume: num(info.search_volume), kd: num(props.keyword_difficulty), traffic: num(serp.etv),
+      intent: Object.hasOwn(intents, String(intentName)) ? intents[String(intentName)] : '?', intentLabel: typeof intentName === 'string' ? intentName : '未取得' });
+    costs.set(key, num(serp.estimated_paid_traffic_cost));
   }
-
-  // Top Pages 配列の組み立て
-  const topPages: FormattedTopPage[] = Object.values(urlAgg)
-    .sort((a, b) => b.totalTraffic - a.totalTraffic)
-    .slice(0, 30)
-    .map((p, idx) => {
-      const share = totalEstimatedTraffic > 0 
-        ? Math.round((p.totalTraffic / totalEstimatedTraffic) * 1000) / 10 
-        : 0;
-      return {
-        id: String(idx + 1),
-        url: p.url,
-        pageType: p.url.includes("case") ? "Article" : p.url.includes("product") ? "Product" : "Guide",
-        ur: Math.min(10, Math.max(1, Math.round(p.totalTraffic / 150) + 2)),
-        traffic: p.totalTraffic,
-        trafficShare: share,
-        trafficValue: Math.round(p.totalCost * 10) / 10,
-        refDomains: Math.max(0, Math.round(refDomains / (idx + 2))),
-        keywordsCount: p.count,
-        topKeyword: p.topKw,
-        topKeywordPos: p.topKwPos,
-        topKeywordVol: p.topKwVol
-      };
-    });
-
-  // C. Historical data の整形 (メリハリのある起伏プロファイルを適用)
-  const history: FormattedMonthlyData[] = [];
-  const basePeakTraffic = totalEstimatedTraffic > 0 ? Math.max(totalEstimatedTraffic, 4100) : 4100;
-  const basePeakPos = pos1_3Count + pos4_10Count + pos11_20Count > 0 ? (pos1_3Count + pos4_10Count + pos11_20Count) : 210;
-
-  const now = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const mStr = `${y}年${m}月`;
-    const factorIdx = 23 - i;
-    const factor = AHREFS_WAVE_FACTORS[factorIdx] || 0.5;
-
-    const trf = Math.round(basePeakTraffic * factor);
-    const p1 = Math.round((pos1_3Count || 56) * factor);
-    const p2 = Math.round((pos4_10Count || 125) * factor);
-    const p3 = Math.round((pos11_20Count || 29) * factor);
-    const p4 = Math.round((pos21_50Count || 38) * factor);
-
-    history.push({
-      month: mStr,
-      shortLabel: (m === 3 || m === 6 || m === 9 || m === 12) ? mStr : "",
-      traffic: trf,
-      pos1_3: p1,
-      pos4_10: p2,
-      pos11_20: p3,
-      pos21_50: p4,
-      hasGoogleUpdate: (m === 3 || m === 6 || m === 8 || m === 9 || m === 12),
-      updateBadge: m === 12 || m === 3 ? "②" : "G"
-    });
+  const groups = new Map<string, FormattedKeyword[]>();
+  for (const keyword of keywords) groups.set(keyword.url, [...(groups.get(keyword.url) ?? []), keyword]);
+  const trafficTotal = sum(...keywords.map(k => k.traffic));
+  const topPages = [...groups].map(([url, items]): FormattedTopPage => {
+    items.sort((a, b) => (b.traffic ?? -1) - (a.traffic ?? -1));
+    const best = items[0], traffic = sum(...items.map(k => k.traffic));
+    return { id: url, url, pageType: '未分類', ur: null, refDomains: null, traffic,
+      trafficShare: trafficTotal !== null && trafficTotal > 0 && traffic !== null ? traffic / trafficTotal * 100 : null,
+      trafficValue: sum(...items.map(k => costs.get(k.id))), keywordsCount: items.length,
+      topKeyword: best.keyword, topKeywordPos: best.position, topKeywordVol: best.volume };
+  }).sort((a, b) => (b.traffic ?? -1) - (a.traffic ?? -1));
+  const months = new Map<string, FormattedMonthlyData>();
+  for (const value of list(historical.items)) {
+    const item = row(value), metrics = row(row(item.metrics).organic);
+    const year = num(item.year), month = num(item.month);
+    const traffic = num(metrics.etv), p13 = sum(metrics.pos_1, metrics.pos_2_3), p410 = num(metrics.pos_4_10);
+    const p1120 = num(metrics.pos_11_20), p2150 = sum(metrics.pos_21_30, metrics.pos_31_40, metrics.pos_41_50);
+    if (!year || !Number.isInteger(year) || year < 2000 || year > 2100 || !month || month > 12 || !Number.isInteger(month) ||
+      [traffic, p13, p410, p1120, p2150].some(v => v === null)) continue;
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    months.set(key, { month: key, shortLabel: `${year}/${month}`, traffic: traffic!, pos1_3: p13!, pos4_10: p410!, pos11_20: p1120!, pos21_50: p2150! });
   }
+  return { schemaVersion: 2, domain, source: 'dataforseo', fetchedAt: new Date().toISOString(), warnings,
+    summary: { dr: num(backlinks.rank), ur: null, backlinks: num(backlinks.backlinks), refDomains: num(backlinks.referring_domains), dofollowPercent: null,
+      organicKeywords: num(organic.count), organicTraffic: num(organic.etv), trafficValue: num(organic.estimated_paid_traffic_cost),
+      pos1_3Count: sum(organic.pos_1, organic.pos_2_3), pos4_10Count: num(organic.pos_4_10), pos11_20Count: num(organic.pos_11_20),
+      pos21_50Count: sum(organic.pos_21_30, organic.pos_31_40, organic.pos_41_50) },
+    history: [...months].sort(([a], [b]) => a.localeCompare(b)).slice(-24).map(([, value]) => value), keywords, topPages };
+}
+export async function getSiteExplorerData(domain: string): Promise<SiteExplorerResult> {
+  const target = normalizeDomain(domain);
+  const results = await Promise.allSettled([
+    callDataForSeo('dataforseo_labs/google/ranked_keywords/live', [{ target, location_code: 2392, language_code: 'ja', limit: 100, order_by: ['ranked_serp_element.serp_item.etv,desc'] }]),
+    callDataForSeo('backlinks/summary/live', [{ target, include_subdomains: true }]),
+    callDataForSeo('dataforseo_labs/google/historical_rank_overview/live', [{ target, location_code: 2392, language_code: 'ja' }]),
+  ]);
+  if (results.every(r => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
+  const warnings = results.flatMap((r, i) => r.status === 'rejected' ? [`${['キーワード', '被リンク', '履歴'][i]}データを取得できませんでした。`] : []);
+  const values = results.map(r => r.status === 'fulfilled' ? r.value : {});
+  return normalizeResults(target, values[0], values[1], values[2], warnings);
+}
 
-  return {
-    domain,
-    summary: {
-      dr,
-      ur: Math.min(10, Math.round(dr / 5) + 1),
-      backlinks,
-      refDomains,
-      dofollowPercent,
-      organicKeywords: keywords.length > 0 ? keywords.length : 172,
-      organicTraffic: totalEstimatedTraffic > 0 ? totalEstimatedTraffic : 1520,
-      trafficValue: totalEstimatedValue > 0 ? Math.round(totalEstimatedValue) : 534,
-      pos1_3Count: pos1_3Count > 0 ? pos1_3Count : 28,
-      pos4_10Count: pos4_10Count > 0 ? pos4_10Count : 45,
-      pos11_20Count: pos11_20Count > 0 ? pos11_20Count : 39,
-      pos21_50Count: pos21_50Count > 0 ? pos21_50Count : 60,
-    },
-    history,
-    keywords,
-    topPages,
-    source: "dataforseo",
-    fetchedAt: new Date().toISOString()
-  };
+// Cached JSON is an external input: a version tag alone cannot establish its shape.
+export function isSiteExplorerResult(value: unknown, domain: string): value is SiteExplorerResult {
+  const data = row(value);
+  const metric = (v: unknown) => v === null || num(v) !== null;
+  const fields = (v: unknown, names: string[]) => names.every(name => metric(row(v)[name]));
+  const text = (v: unknown) => typeof v === 'string';
+  const validUrl = (v: unknown) => typeof v === 'string' && safeUrl(v) === v;
+  const bounded = (v: unknown, max: number, test: (item: Row) => boolean) =>
+    Array.isArray(v) && v.length <= max && v.every(item => !!item && typeof item === 'object' && !Array.isArray(item) && test(row(item)));
+  const timestamp = typeof data.fetchedAt === 'string' ? Date.parse(data.fetchedAt) : NaN;
+  return data.schemaVersion === 2 && data.domain === domain && data.source === 'dataforseo' &&
+    Number.isFinite(timestamp) && timestamp <= Date.now() &&
+    fields(data.summary, ['dr', 'ur', 'backlinks', 'refDomains', 'dofollowPercent', 'organicKeywords', 'organicTraffic', 'trafficValue', 'pos1_3Count', 'pos4_10Count', 'pos11_20Count', 'pos21_50Count']) &&
+    bounded(data.history, 24, item => text(item.month) && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(item.month)) && text(item.shortLabel) &&
+      ['traffic', 'pos1_3', 'pos4_10', 'pos11_20', 'pos21_50'].every(key => num(item[key]) !== null) &&
+      (item.hasGoogleUpdate === undefined || typeof item.hasGoogleUpdate === 'boolean') && (item.updateBadge === undefined || text(item.updateBadge))) &&
+    bounded(data.keywords, 100, item => text(item.id) && text(item.keyword) && text(item.intentLabel) && ['I', 'N', 'C', 'T', '?'].includes(String(item.intent)) &&
+      validUrl(item.url) && Number.isInteger(item.position) && Number(item.position) >= 1 &&
+      fields(item, ['prevPosition', 'volume', 'kd', 'traffic'])) &&
+    bounded(data.topPages, 100, item => text(item.id) && validUrl(item.url) && text(item.pageType) && text(item.topKeyword) &&
+      Number.isInteger(item.keywordsCount) && Number(item.keywordsCount) >= 1 && Number.isInteger(item.topKeywordPos) && Number(item.topKeywordPos) >= 1 &&
+      fields(item, ['ur', 'traffic', 'trafficShare', 'trafficValue', 'refDomains', 'topKeywordVol'])) &&
+    Array.isArray(data.warnings) && data.warnings.length <= 10 && data.warnings.every(text);
 }
