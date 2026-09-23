@@ -20,12 +20,31 @@ function json(data: unknown, status = 200) { return NextResponse.json(data, { st
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await createServerSupabaseClient();
-    const { data: { user }, error } = await auth.auth.getUser();
-    if (error || !user) return json({ error: 'ログインが必要です。' }, 401);
+    // 認証（Bearer トークン または Cookie）
+    let user: { id: string } | null = null;
+    const authHeader = typeof req.headers?.get === 'function' ? req.headers.get('authorization') : null;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const admin = createAdminClient();
+        const { data } = await admin.auth.getUser(token);
+        if (data?.user) user = { id: data.user.id };
+      } catch {}
+    }
+    if (!user) {
+      try {
+        const auth = await createServerSupabaseClient();
+        const { data: { user: cookieUser } } = await auth.auth.getUser();
+        if (cookieUser) user = { id: cookieUser.id };
+      } catch {}
+    }
+
+    if (!user) return json({ error: 'ログインが必要です。' }, 401);
+
     let domain: string;
     try { domain = normalizeDomain(new URL(req.url).searchParams.get('domain') ?? ''); }
     catch { return json({ error: '有効な公開ドメインを入力してください。' }, 400); }
+
     // A query parameter must never bypass the paid-request cache.
     const cached = memory.get(domain);
     if (cached && fresh(cached)) return json({ ...cached, cached: true, cacheSource: 'memory' });

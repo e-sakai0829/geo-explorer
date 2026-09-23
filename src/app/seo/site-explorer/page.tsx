@@ -7,6 +7,7 @@ import { Globe, Search, Download, ExternalLink, FileText, BarChart3, ArrowUpRigh
 
 import type { SiteExplorerResult, FormattedKeyword as OrganicKeyword, FormattedTopPage as TopPage, FormattedMonthlyData as MonthlyHistoryPoint } from "@/lib/dataforseo";
 import { calculateNiceScale, csvCell, displayMetric } from "@/lib/seo-chart";
+import { supabase } from "@/lib/supabase";
 type SummaryData = SiteExplorerResult['summary'];
 const DEFAULT_SUMMARY: SummaryData = { dr: null, ur: null, backlinks: null, refDomains: null, dofollowPercent: null, organicKeywords: null, organicTraffic: null, trafficValue: null, pos1_3Count: null, pos4_10Count: null, pos11_20Count: null, pos21_50Count: null };
 const DEFAULT_HISTORY: MonthlyHistoryPoint[] = [];
@@ -19,7 +20,8 @@ function SiteExplorerContent() {
   const activeTabParam = searchParams.get("tab") || "overview";
 
   const activeTab = activeTabParam === "keywords" || activeTabParam === "pages" ? activeTabParam : "overview";
-  const [targetDomain, setTargetDomain] = useState<string>("www.daiwa-logi.co.jp");
+  const domainParam = searchParams.get("domain") || searchParams.get("target") || "";
+  const [targetDomain, setTargetDomain] = useState<string>(domainParam || "");
   const [protocol, setProtocol] = useState<string>("http + https");
   const [matchScope, setMatchScope] = useState<string>("subdomain");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -71,7 +73,18 @@ function SiteExplorerContent() {
     setHoveredTrafficIndex(null); setHoveredPosIndex(null);
     setResultDomain('取得中'); setLastFetchedAt('未取得'); setIsCached(false); setNotice('');
     try {
-      const res = await fetch('/api/seo/site-explorer?domain=' + encodeURIComponent(domain), { signal: controller.signal });
+      const headers: Record<string, string> = {};
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.access_token) {
+          headers["Authorization"] = `Bearer ${sessionData.session.access_token}`;
+        }
+      } catch {}
+
+      const res = await fetch('/api/seo/site-explorer?domain=' + encodeURIComponent(domain), {
+        headers,
+        signal: controller.signal
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'データを取得できませんでした。');
       if (id !== request.current.id) return;
@@ -402,7 +415,30 @@ function SiteExplorerContent() {
           </div>
         </div>
 
-        <p role="status" className="text-sm text-amber-800">{notice}</p>
+        {notice && (
+          <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-sm ${
+            notice.includes("ログイン")
+              ? "bg-amber-50 border-amber-200 text-amber-900"
+              : notice.includes("エラー") || notice.includes("できませんでした")
+              ? "bg-rose-50 border-rose-200 text-rose-800"
+              : "bg-slate-100 border-slate-200 text-slate-700"
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">
+                {notice.includes("ログイン") ? "🔒 認証ガード:" : "ℹ️ 案内:"}
+              </span>
+              <span>{notice}</span>
+            </div>
+            {notice.includes("ログイン") && (
+              <Link
+                href="/login"
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all shadow-sm shrink-0"
+              >
+                ログイン画面へ
+              </Link>
+            )}
+          </div>
+        )}
         <p className="text-xs text-slate-500">表示対象: {resultDomain} ・ キーワード上位100件まで / 推定流入 ・ 未取得値は「—」</p>
         {/* 3. タブナビゲーション */}
         <div className="flex flex-wrap border-b border-slate-200 gap-2">
