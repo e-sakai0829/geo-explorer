@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
             }
             return result;
           } catch (error) {
-            failures.set(domain, Date.now() + 60000);
+            failures.set(domain, Date.now() + 15000);
             if (failures.size > 100) failures.delete(failures.keys().next().value!);
             throw error;
           } finally { pending.delete(domain); }
@@ -96,6 +96,19 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     const status = error instanceof DataForSeoError ? error.status : 503;
-    return json({ error: status === 429 ? '取得回数の上限に達しました。時間をおいて再実行してください。' : 'データを取得できませんでした。時間をおいて再実行してください。', code: error instanceof DataForSeoError ? error.code : 'SEO_UNAVAILABLE' }, status);
+    const code = error instanceof DataForSeoError ? error.code : 'SEO_UNAVAILABLE';
+    let message = 'データを取得できませんでした。時間をおいて再実行してください。';
+    if (code === 'PROVIDER_NOT_CONFIGURED') {
+      message = 'DataForSEO APIの認証情報が未設定です。Vercel環境変数（DATAFORSEO_API_LOGIN / DATAFORSEO_API_PASSWORD）を設定してください。';
+    } else if (code === 'PROVIDER_COOLDOWN') {
+      message = '直前の取得エラーによるクールダウン中です。数十秒待ってから再実行してください。';
+    } else if (code === 'RATE_LIMITED') {
+      message = '取得回数の上限に達しました。時間をおいて再実行してください。';
+    } else if (code === 'PROVIDER_HTTP_402') {
+      message = 'DataForSEOの残高が不足しています。管理画面よりチャージしてください。';
+    } else if (error instanceof Error && error.message) {
+      message = `データを取得できませんでした (${error.message})。`;
+    }
+    return json({ error: message, code }, status);
   }
 }

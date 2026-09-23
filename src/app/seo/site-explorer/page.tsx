@@ -244,9 +244,9 @@ function SiteExplorerContent() {
   const posLine1_3_D = posPoints.reduce((acc, pt, i) => `${i === 0 ? "M" : acc + " L"} ${pt.x} ${pt.y1_3}`, "");
 
   return (
-    <div className="min-h-screen w-[calc(100vw-20rem)] min-w-0 bg-slate-50 font-sans pb-20">
+    <div className="min-h-screen w-full bg-slate-50 font-sans pb-20">
       {/* 1. 上部コントロールバー (Ahrefs Site Explorer ヘッダー) */}
-      <div className="bg-slate-900 text-white border-b border-slate-800 sticky top-14 z-20 shadow-md">
+      <div className="bg-slate-900 text-white border-b border-slate-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="flex items-center bg-slate-800/90 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300">
