@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       .select('id').eq('user_id', user.id).maybeSingle();
     if (orgError || !org) return json({ error: '組織を確認できませんでした。' }, 403);
     const { data: project, error: projectError } = await db.from('projects')
-      .select('id, name, domain, competitors, competitor_domains')
+      .select('id, name, domain')
       .eq('id', projectId).eq('organization_id', org.id).maybeSingle();
     if (projectError || !project) return json({ error: 'プロジェクトを確認できませんでした。' }, 404);
 
@@ -35,8 +35,7 @@ export async function GET(req: NextRequest) {
     catch { return json({ error: '自社URLを確認してください。' }, 422); }
     const enteredCompetitors = req.nextUrl.searchParams.getAll('competitor');
     if (enteredCompetitors.length > 4) return json({ error: '自社を含め最大5ドメイン（競合4社まで）です。' }, 422);
-    const rawCompetitors = enteredCompetitors.length ? enteredCompetitors : (Array.isArray(project.competitor_domains) ? project.competitor_domains : []);
-    const competitorNames = Array.isArray(project.competitors) ? project.competitors : [];
+    const rawCompetitors = enteredCompetitors;
     const domains: GapDomain[] = [{ domain: ownDomain, name: project.name || '自社サイト', color: '#10b981' }];
     const colors = ['#f59e0b', '#06b6d4', '#a855f7', '#ef4444'];
     for (let i = 0; i < rawCompetitors.length && domains.length < 5; i++) {
@@ -45,8 +44,7 @@ export async function GET(req: NextRequest) {
       try { domain = normalizeDomain(rawCompetitors[i]); }
       catch { return json({ error: `競合${i + 1}のドメインを修正してください。` }, 422); }
       if (domains.some(item => item.domain === domain)) continue;
-      domains.push({ domain, name: enteredCompetitors.length ? domain : (typeof competitorNames[i] === 'string' && competitorNames[i].trim()
-        ? competitorNames[i].trim() : domain), color: colors[domains.length - 1] });
+      domains.push({ domain, name: domain, color: colors[domains.length - 1] });
     }
     if (domains.length < 2) return json({ error: '競合ドメインを1社以上登録してください。' }, 422);
 
