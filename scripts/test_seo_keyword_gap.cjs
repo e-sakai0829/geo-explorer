@@ -78,21 +78,26 @@ const route = load('src/app/api/seo/keyword-gap/route.ts', {
   } },
   '@/lib/seo-keyword-gap': gap,
 });
-const req = () => new NextRequest('https://local/api/seo/keyword-gap?projectId=22222222-2222-4222-8222-222222222222');
+const req = (competitors = []) => {
+  const url = new URL('https://local/api/seo/keyword-gap?projectId=22222222-2222-4222-8222-222222222222&own=own.example.com');
+  competitors.forEach(domain => url.searchParams.append('competitor', domain));
+  return new NextRequest(url);
+};
 (async () => {
   user = null;
   assert.equal((await route.GET(req())).status, 401);
   assert.equal(providerCalls, 0);
   user = { id: '11111111-1111-4111-8111-111111111111', email: 'a@example.com' };
-  project = { ...project, competitor_domains: [] };
   assert.equal((await route.GET(req())).status, 422);
   assert.equal(providerCalls, 0);
-  project = { ...project, competitor_domains: ['a.example.com', 'b.example.com'] };
-  const result = await route.GET(req());
+  assert.equal((await route.GET(req(['a.example.com', 'b.example.com', 'c.example.com', 'd.example.com', 'e.example.com']))).status, 422);
+  assert.equal(providerCalls, 0);
+  const comparison = req(['a.example.com', 'b.example.com']);
+  const result = await route.GET(comparison);
   assert.equal(result.status, 200);
   assert.equal((await result.json()).totalCount, 3);
   assert.equal(providerCalls, 3);
   providerFails = true;
-  assert.equal((await route.GET(req())).status, 503);
-  console.log('PASS keyword gap: 13 transformation and route assertions; zero paid API calls.');
+  assert.equal((await route.GET(comparison)).status, 503);
+  console.log('PASS keyword gap transformation, project scope and five-domain cap; zero paid API calls.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
