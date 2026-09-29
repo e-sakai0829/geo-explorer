@@ -19,7 +19,7 @@ import {
   BarChart3,
   FileText,
   Globe,
-  ChevronRight
+  type LucideIcon
 } from "lucide-react";
 import ConsultingModal from "@/components/ConsultingModal";
 
@@ -32,7 +32,7 @@ interface SubItem {
 interface NavItem {
   name: string;
   href: string;
-  icon: any;
+  icon: LucideIcon;
   subItems?: SubItem[];
 }
 
@@ -46,7 +46,7 @@ export default function Sidebar() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const supabase = createClient();
-  const { lang, t } = useLanguage();
+  const { lang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("マイプロジェクト");
   const [projectDomain, setProjectDomain] = useState<string>("");
@@ -95,6 +95,11 @@ export default function Sidebar() {
           name: lang === "zh-TW" ? "SEO 競爭關鍵字分析" : lang === "en" ? "Keyword Gap" : "KWギャップ", 
           href: "/seo", 
           icon: BarChart3 
+        },
+        {
+          name: lang === "zh-TW" ? "關鍵字探索" : lang === "en" ? "Keyword Explorer" : "KWエクスプローラー",
+          href: "/seo/keyword-explorer",
+          icon: Search
         },
         { 
           name: lang === "zh-TW" ? "SEO 關鍵字文章生成" : lang === "en" ? "SEO Article Studio" : "記事制作", 
