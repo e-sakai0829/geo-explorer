@@ -15,11 +15,14 @@ import type { MierucaDomainSummary, MierucaKeywordItem } from "@/app/api/seo/key
 import { csvCell } from "@/lib/seo-chart";
 
 export default function MierucaCompetitorKeywordPage() {
-  const { projectId } = useProject();
-  return <KeywordGapContent key={projectId ?? 'none'} projectId={projectId} />;
+  const { projectId, currentProject } = useProject();
+  return <KeywordGapContent key={projectId ?? 'none'} projectId={projectId} defaultOwn={currentProject?.domain ?? ''} />;
 }
 
-function KeywordGapContent({ projectId }: { projectId: string | null }) {
+function KeywordGapContent({ projectId, defaultOwn }: { projectId: string | null; defaultOwn: string }) {
+  const [own, setOwn] = useState(defaultOwn);
+  const [competitors, setCompetitors] = useState(['']);
+  const [sharedOnly, setSharedOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<{
@@ -35,6 +38,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
     keywordLimitPerDomain: number;
     coverageNote: string;
     stale: boolean;
+    pendingDomains?: string[];
   } | null>(null);
 
   const requestId = useRef(0);
@@ -42,18 +46,23 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
   const [selectedKws, setSelectedKws] = useState<Set<string>>(new Set());
 
   const fetchData = async () => {
-    if (!projectId) return;
+    if (!projectId || !own.trim() || !competitors.some(value => value.trim())) {
+      setError('自社URLと競合URLを1件以上入力してください。');
+      return;
+    }
+    const params = new URLSearchParams({ projectId, own: own.trim() });
+    competitors.filter(value => value.trim()).forEach(value => params.append('competitor', value.trim()));
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/seo/keyword-gap?projectId=${projectId}`);
+      const res = await fetch(`/api/seo/keyword-gap?${params.toString()}`);
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "データの取得に失敗しました。");
       }
       const json = await res.json();
-      if (id === requestId.current) setData(json);
+      if (id === requestId.current) { setData(json); setSelectedKws(new Set()); }
     } catch (err: unknown) {
       if (id === requestId.current) setError(err instanceof Error ? err.message : "データの取得に失敗しました。");
     } finally {
@@ -69,10 +78,10 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
   // 検索フィルタリング
   const filteredKeywords = useMemo(() => {
     if (!data?.keywords) return [];
-    if (!searchQuery.trim()) return data.keywords;
     const q = searchQuery.toLowerCase().trim();
-    return data.keywords.filter((item) => item.keyword.toLowerCase().includes(q));
-  }, [data, searchQuery]);
+    return data.keywords.filter((item) => (!q || item.keyword.toLowerCase().includes(q)) &&
+      (!sharedOnly || data.summaries.filter(summary => item.domainStats[summary.domain]?.rank !== null && item.domainStats[summary.domain]?.rank !== undefined).length >= 2));
+  }, [data, searchQuery, sharedOnly]);
 
   // チェックボックス全選択
   const toggleSelectAll = () => {
@@ -98,6 +107,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
 
     const headers = [
       "キーワード",
+      "取得ドメイン数",
       "月間検索数",
       "CPC (USD)",
       ...data.summaries.flatMap((s) => [
@@ -110,6 +120,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
     const rows = filteredKeywords.map((item) => {
       const row: (string | number)[] = [
         item.keyword,
+        data.summaries.filter(summary => item.domainStats[summary.domain]?.rank != null).length,
         item.volume ?? "",
         item.cpc ?? "",
       ];
@@ -160,15 +171,23 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
             競合流入キーワード調査
           </h1>
-          <button onClick={fetchData} disabled={!projectId || loading} className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-md disabled:opacity-50">
-            {loading ? '取得中…' : '競合データを取得'}
+          <button onClick={fetchData} disabled={!projectId || loading || !own.trim() || !competitors.some(value => value.trim())} className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-md disabled:opacity-50">
+            {loading ? '取得中…' : '比較を実行'}
           </button>
         </div>
       </div>
 
       <p className="text-xs text-slate-600 -mt-3 flex items-center gap-1">
-        自社と登録済み競合の推定検索流入を比較します。取得ボタンを押すと、未キャッシュのドメインでDataForSEOの有料取得が発生します。
+        自社1件と競合最大6件の取得キーワードを横並びで比較します。入力URLのパスは対象外で、ドメイン全体を調査します。未キャッシュのドメインはDataForSEOの有料取得が発生します。
       </p>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4" aria-label="比較対象URLの入力">
+        <div><h2 className="text-base font-bold">比較するサイトを入力</h2><p className="text-xs text-slate-500">URLまたはドメインを入力。現在はパスを除いたドメイン単位で比較します。</p></div>
+        <label className="block text-xs font-bold">自社URL<input value={own} onChange={e => { setOwn(e.target.value); setData(null); }} placeholder="https://example.com" className="mt-1 block w-full rounded border border-slate-300 p-2 font-normal" /></label>
+        <div className="grid md:grid-cols-2 gap-3">{competitors.map((value, index) => <label key={index} className="block text-xs font-bold">競合{index + 1} URL<input value={value} onChange={e => { setCompetitors(items => items.map((item, i) => i === index ? e.target.value : item)); setData(null); }} placeholder="https://competitor.example" className="mt-1 block w-full rounded border border-slate-300 p-2 font-normal" /></label>)}</div>
+        <div className="flex flex-wrap gap-2"><button type="button" disabled={competitors.length >= 6} onClick={() => { setCompetitors(items => [...items, '']); setData(null); }} className="rounded border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-40">＋ 競合を追加（最大6件）</button>{competitors.length > 1 && <button type="button" onClick={() => { setCompetitors(items => items.slice(0, -1)); setData(null); }} className="rounded border border-slate-300 px-3 py-1.5 text-xs">最後の欄を削除</button>}</div>
+        <p className="text-xs text-amber-800">未キャッシュの新規取得は1ユーザー毎時5ドメインまでです。上限を超える場合は取得できた分を表示し、残りは次の時間帯に再実行できます。</p>
+      </section>
 
       {/* 3. サブコントロールバー（ミエルカ仕様） */}
       <div className="p-2 bg-slate-200/70 rounded-lg flex items-center justify-between gap-3 text-xs">
@@ -213,6 +232,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
               {data.theme}
             </h2>
+            {!!data.pendingDomains?.length && <p role="status" className="text-xs bg-amber-50 border border-amber-200 p-2 rounded text-amber-900">未取得: {data.pendingDomains.join('、')}。取得済みのサイトのみ表示中です。時間をおいて再実行してください。</p>}
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-600">
               <div>比較日: <strong className="text-slate-900 font-mono">{data.date}</strong></div>
               <div>作成者: <strong className="text-slate-900">{data.author}</strong></div>
@@ -338,6 +358,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
                   className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded focus:border-sky-500 focus:outline-hidden"
                 />
               </div>
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />2サイト以上が取得したKWのみ</label>
               <span className="text-xs text-slate-400 font-mono">各ドメイン上位{data.keywordLimitPerDomain}件</span>
             </div>
 
@@ -358,6 +379,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
                     <th className="py-2.5 px-3 min-w-[180px]">
                       キーワード
                     </th>
+                    <th className="py-2.5 px-3 text-right min-w-[85px]">取得サイト数</th>
                     <th className="py-2.5 px-3 text-right min-w-[90px]">
                       月間検索数
                     </th>
@@ -403,6 +425,7 @@ function KeywordGapContent({ projectId }: { projectId: string | null }) {
                         {item.keyword}
                       </td>
 
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">{data.summaries.filter(summary => item.domainStats[summary.domain]?.rank != null).length}</td>
                       <td className="py-2.5 px-3 text-right font-mono text-slate-700">
                         {item.volume?.toLocaleString() ?? '—'}
                       </td>

@@ -30,25 +30,29 @@ export async function GET(req: NextRequest) {
     if (projectError || !project) return json({ error: 'プロジェクトを確認できませんでした。' }, 404);
 
     let ownDomain: string;
-    try { ownDomain = normalizeDomain(project.domain ?? ''); }
-    catch { return json({ error: 'プロジェクトに有効な自社ドメインを登録してください。' }, 422); }
-    const rawCompetitors = Array.isArray(project.competitor_domains) ? project.competitor_domains : [];
+    const enteredOwn = req.nextUrl.searchParams.get('own');
+    try { ownDomain = normalizeDomain(enteredOwn || project.domain || ''); }
+    catch { return json({ error: '自社URLを確認してください。' }, 422); }
+    const enteredCompetitors = req.nextUrl.searchParams.getAll('competitor');
+    if (enteredCompetitors.length > 6) return json({ error: '競合は最大6社までです。' }, 422);
+    const rawCompetitors = enteredCompetitors.length ? enteredCompetitors : (Array.isArray(project.competitor_domains) ? project.competitor_domains : []);
     const competitorNames = Array.isArray(project.competitors) ? project.competitors : [];
     const domains: GapDomain[] = [{ domain: ownDomain, name: project.name || '自社サイト', color: '#10b981' }];
-    for (let i = 0; i < rawCompetitors.length && domains.length < 3; i++) {
+    const colors = ['#f59e0b', '#06b6d4', '#a855f7', '#ef4444', '#84cc16', '#f97316'];
+    for (let i = 0; i < rawCompetitors.length && domains.length < 7; i++) {
       if (typeof rawCompetitors[i] !== 'string' || !rawCompetitors[i].trim()) continue;
       let domain: string;
       try { domain = normalizeDomain(rawCompetitors[i]); }
       catch { return json({ error: `競合${i + 1}のドメインを修正してください。` }, 422); }
       if (domains.some(item => item.domain === domain)) continue;
-      domains.push({ domain, name: typeof competitorNames[i] === 'string' && competitorNames[i].trim()
-        ? competitorNames[i].trim() : domain, color: domains.length === 1 ? '#f59e0b' : '#06b6d4' });
+      domains.push({ domain, name: enteredCompetitors.length ? domain : (typeof competitorNames[i] === 'string' && competitorNames[i].trim()
+        ? competitorNames[i].trim() : domain), color: colors[domains.length - 1] });
     }
     if (domains.length < 2) return json({ error: '競合ドメインを1社以上登録してください。' }, 422);
 
     // Invoke the existing authenticated, DB-leased Site Explorer boundary.
     // No direct provider call may bypass its shared cache or hourly cost guard.
-    const results = await Promise.all(domains.map(async ({ domain }) => {
+    const attempts = await Promise.allSettled(domains.map(async ({ domain }) => {
       const url = new URL('/api/seo/site-explorer', req.url);
       url.searchParams.set('domain', domain);
       const response = await getSiteExplorer(new NextRequest(url, { headers: req.headers }));
@@ -59,14 +63,21 @@ export async function GET(req: NextRequest) {
         throw { status: 503, message: 'キーワードデータを取得できませんでした。' };
       return { report: payload as SiteExplorerResult, stale };
     }));
-    const gap = buildKeywordGap(domains, results.map(result => result.report));
+    const availableDomains = domains.filter((_, index) => attempts[index].status === 'fulfilled');
+    const results = attempts.filter((attempt): attempt is PromiseFulfilledResult<{ report: SiteExplorerResult; stale: boolean }> => attempt.status === 'fulfilled').map(attempt => attempt.value);
+    const pendingDomains = domains.filter((_, index) => attempts[index].status === 'rejected').map(item => item.domain);
+    if (!results.length) {
+      const first = attempts.find((attempt): attempt is PromiseRejectedResult => attempt.status === 'rejected');
+      throw first?.reason ?? { status: 503, message: '取得できませんでした。' };
+    }
+    const gap = buildKeywordGap(availableDomains, results.map(result => result.report));
     return json({
-      ...gap, theme: project.name || ownDomain,
+      ...gap, pendingDomains, theme: project.name || ownDomain,
       author: user.email?.split('@')[0] || '—',
       date: new Date().toISOString().slice(0, 10), country: 'Google 日本・日本語',
       source: 'DataForSEO', keywordLimitPerDomain: 100,
       stale: results.some(result => result.stale),
-      coverageNote: '各ドメインの推定流入上位100件を比較。未掲載の順位は圏外ではなく未確認です。',
+      coverageNote: '各ドメインの推定流入上位100件を比較。URLのパスは対象外でドメイン全体です。未掲載の順位は圏外ではなく未確認です。',
     });
   } catch (error) {
     const failure = error as { status?: number; message?: string };

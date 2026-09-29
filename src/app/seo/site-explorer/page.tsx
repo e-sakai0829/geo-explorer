@@ -38,6 +38,7 @@ function SiteExplorerContent() {
   const [historyAll, setHistoryAll] = useState<MonthlyHistoryPoint[]>(DEFAULT_HISTORY);
   const [period, setPeriod] = useState<6 | 12 | 24 | 'all'>(24);
   const historyData = useMemo(() => selectHistoryPeriod(historyAll, period), [historyAll, period]);
+  const latestHistory = historyAll.at(-1);
   const [keywords, setKeywords] = useState<OrganicKeyword[]>(DEFAULT_KEYWORDS);
   const [topPages, setTopPages] = useState<TopPage[]>(DEFAULT_TOP_PAGES);
 
@@ -407,15 +408,16 @@ function SiteExplorerContent() {
             {/* オーガニックトラフィック */}
             <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-100">
               <div className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
-                <span>月間トラフィック</span>
+                <span>履歴の最新月の推定流入</span>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center">
                   <ArrowUpRight className="w-3 h-3" /> 推定
                 </span>
               </div>
               <div className="text-2xl font-black text-indigo-900 mt-1">
-                {displayMetric(summary.organicTraffic)}
+                {displayMetric(latestHistory?.traffic ?? null)}
               </div>
-              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">{displayMetric(summary.organicTraffic)} 推定検索流入</div>
+              <div className="text-[10px] text-indigo-600 font-medium mt-0.5">{latestHistory ? `${latestHistory.month}・グラフ最終点と同じ系列` : "履歴未取得"}</div>
+              {summary.organicTraffic !== null && <div className="text-[10px] text-slate-500 mt-0.5">現在の概要推計: {displayMetric(summary.organicTraffic)}（別取得系列）</div>}
             </div>
 
             {/* トラフィック価値 */}
