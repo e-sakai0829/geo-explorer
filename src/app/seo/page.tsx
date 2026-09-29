@@ -178,14 +178,14 @@ function KeywordGapContent({ projectId, defaultOwn }: { projectId: string | null
       </div>
 
       <p className="text-xs text-slate-600 -mt-3 flex items-center gap-1">
-        自社1件と競合最大6件の取得キーワードを横並びで比較します。入力URLのパスは対象外で、ドメイン全体を調査します。未キャッシュのドメインはDataForSEOの有料取得が発生します。
+        自社を含め最大5ドメイン（競合4件）の取得キーワードを横並びで比較します。入力URLのパスは対象外で、ドメイン全体を調査します。未キャッシュのドメインはDataForSEOの有料取得が発生します。
       </p>
 
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4" aria-label="比較対象URLの入力">
         <div><h2 className="text-base font-bold">比較するサイトを入力</h2><p className="text-xs text-slate-500">URLまたはドメインを入力。現在はパスを除いたドメイン単位で比較します。</p></div>
         <label className="block text-xs font-bold">自社URL<input value={own} onChange={e => { setOwn(e.target.value); setData(null); }} placeholder="https://example.com" className="mt-1 block w-full rounded border border-slate-300 p-2 font-normal" /></label>
         <div className="grid md:grid-cols-2 gap-3">{competitors.map((value, index) => <label key={index} className="block text-xs font-bold">競合{index + 1} URL<input value={value} onChange={e => { setCompetitors(items => items.map((item, i) => i === index ? e.target.value : item)); setData(null); }} placeholder="https://competitor.example" className="mt-1 block w-full rounded border border-slate-300 p-2 font-normal" /></label>)}</div>
-        <div className="flex flex-wrap gap-2"><button type="button" disabled={competitors.length >= 6} onClick={() => { setCompetitors(items => [...items, '']); setData(null); }} className="rounded border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-40">＋ 競合を追加（最大6件）</button>{competitors.length > 1 && <button type="button" onClick={() => { setCompetitors(items => items.slice(0, -1)); setData(null); }} className="rounded border border-slate-300 px-3 py-1.5 text-xs">最後の欄を削除</button>}</div>
+        <div className="flex flex-wrap gap-2"><button type="button" disabled={competitors.length >= 4} onClick={() => { setCompetitors(items => [...items, '']); setData(null); }} className="rounded border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-40">＋ 競合を追加（最大4件）</button>{competitors.length > 1 && <button type="button" onClick={() => { setCompetitors(items => items.slice(0, -1)); setData(null); }} className="rounded border border-slate-300 px-3 py-1.5 text-xs">最後の欄を削除</button>}</div>
         <p className="text-xs text-amber-800">未キャッシュの新規取得は1ユーザー毎時5ドメインまでです。上限を超える場合は取得できた分を表示し、残りは次の時間帯に再実行できます。</p>
       </section>
 

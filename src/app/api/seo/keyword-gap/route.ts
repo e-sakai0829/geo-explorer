@@ -34,12 +34,12 @@ export async function GET(req: NextRequest) {
     try { ownDomain = normalizeDomain(enteredOwn || project.domain || ''); }
     catch { return json({ error: '自社URLを確認してください。' }, 422); }
     const enteredCompetitors = req.nextUrl.searchParams.getAll('competitor');
-    if (enteredCompetitors.length > 6) return json({ error: '競合は最大6社までです。' }, 422);
+    if (enteredCompetitors.length > 4) return json({ error: '自社を含め最大5ドメイン（競合4社まで）です。' }, 422);
     const rawCompetitors = enteredCompetitors.length ? enteredCompetitors : (Array.isArray(project.competitor_domains) ? project.competitor_domains : []);
     const competitorNames = Array.isArray(project.competitors) ? project.competitors : [];
     const domains: GapDomain[] = [{ domain: ownDomain, name: project.name || '自社サイト', color: '#10b981' }];
-    const colors = ['#f59e0b', '#06b6d4', '#a855f7', '#ef4444', '#84cc16', '#f97316'];
-    for (let i = 0; i < rawCompetitors.length && domains.length < 7; i++) {
+    const colors = ['#f59e0b', '#06b6d4', '#a855f7', '#ef4444'];
+    for (let i = 0; i < rawCompetitors.length && domains.length < 5; i++) {
       if (typeof rawCompetitors[i] !== 'string' || !rawCompetitors[i].trim()) continue;
       let domain: string;
       try { domain = normalizeDomain(rawCompetitors[i]); }
